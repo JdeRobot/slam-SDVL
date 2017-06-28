@@ -114,7 +114,7 @@ int main(int argc, char** argv) {
 
   // Start UI
   ui.start(camera, nullptr);
-  usleep(100 * 1000);
+  usleep(1000 * 1000);
 
   // Start algorithm
   handler = new sdvl::SDVL(camera);
