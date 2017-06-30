@@ -32,6 +32,7 @@ DrawArea::DrawArea(Camera * camera) : Gtk::DrawingArea(), Gtk::GL::Widget<DrawAr
   height_ = 480;
   refresh_time_ = 100;  // ms
   camera_ = camera;
+  follow_ = true;
 
   // Resize drawing area
   set_size_request(640, 480);
@@ -73,12 +74,15 @@ DrawArea::DrawArea(Camera * camera) : Gtk::DrawingArea(), Gtk::GL::Widget<DrawAr
   glutInitDisplayMode(GLUT_RGB | GLUT_DEPTH | GLUT_DOUBLE);
 
   // GL Camera Position and FOA
-  glcam_posZ_ = -0.1;
   glcam_posX_ = 0.0;
-  glcam_posY_ = 2.4;
-  glcam_foaZ_ = 0.3;
+  glcam_posY_ = 0.0;
+  glcam_posZ_ = 2.5;
   glcam_foaX_ = 0.0;
-  glcam_foaY_ = 0.4;
+  glcam_foaY_ = 0.0;
+  glcam_foaZ_ = 0.0;
+  glcam_upX_ = 0.0;
+  glcam_upY_ = 1.0;
+  glcam_upZ_ = 0.0;
 
   radius_ = 2.0;
   latitud_ = 0.2;
@@ -139,11 +143,8 @@ bool DrawArea::on_expose_event(GdkEventExpose* event) {
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
 
-  // Cam position, central point, vector up
-  gluLookAt(glcam_posX_, glcam_posY_, glcam_posZ_, glcam_foaX_, glcam_foaY_, glcam_foaZ_, 0., 1., 0.);
-
-  // Draw world
-  DrawWorld();
+  // Calc camera pose
+  SetCameraPose(pose_);
 
   // Draw map
   glPushMatrix();
@@ -161,42 +162,8 @@ bool DrawArea::on_expose_event(GdkEventExpose* event) {
   return true;
 }
 
-void DrawArea::DrawWorld() {
-  // Ground
-  glColor3f(0.4, 0.4, 0.4);
-  glBegin(GL_LINES);
-  int i;
-  for (i = 0; i < 61; i = i + 2) {
-    glVertex3f(-3., 0., -3. + static_cast<double>(i) / 10.0);
-    glVertex3f(3., 0., -3. + static_cast<double>(i) / 10.0);
-    glVertex3f(-3. + static_cast<double>(i) / 10.0, 0., -3.);
-    glVertex3f(-3. + static_cast<double>(i) / 10.0, 0., 3.);
-  }
-  glEnd();
-
-  // Axis
-  glColor3f(1., 0., 0.);
-  glBegin(GL_LINES);
-  glVertex3f(0.0, 0.0, 0.0);
-  glVertex3f(1.0, 0.0, 0.0);
-  glEnd();
-  glColor3f(0., 1., 0.);
-  glBegin(GL_LINES);
-  glVertex3f(0.0, 0.0, 0.0);
-  glVertex3f(0.0, 1.0, 0.0);
-  glEnd();
-  glColor3f(0., 0., 1.);
-  glBegin(GL_LINES);
-  glVertex3f(0.0, 0.0, 0.0);
-  glVertex3f(0.0, 0.0, 1.0);
-  glEnd();
-}
-
 void DrawArea::DrawMap() {
   bool showlines = false;
-
-  glRotatef(90.0, 1.0, 0.0, 0.0);
-  glRotatef(180.0, 0.0, 1.0, 0.0);
 
   Lock();
 
@@ -295,6 +262,33 @@ void DrawArea::DrawFrustrum(double depth) {
   glEnd();
 }
 
+void DrawArea::SetCameraPose(const SE3 &se3) {
+  Eigen::Matrix3d rot = se3.GetRotation();
+  Eigen::Vector3d t = se3.GetTranslation();
+ 
+  if(follow_) {
+    glcam_foaX_ = t(0);
+    glcam_foaY_ = t(1);
+    glcam_foaZ_ = t(2);
+
+    Eigen::Matrix4d rt;
+    Eigen::Vector4d dist(0, 0, -1.5, 1);
+    rt << rot(0, 0), rot(0, 1), rot(0, 2), t(0), 
+          rot(1, 0), rot(1, 1), rot(1, 2), t(1),
+          rot(2, 0), rot(2, 1), rot(2, 2), t(2),
+          0, 0, 0, 1;
+
+    Eigen::MatrixXd res = rt*dist;
+
+    glcam_posX_ = res(0);
+    glcam_posY_ = res(1);
+    glcam_posZ_ = res(2);
+  }
+
+  // Cam position, central point, vector up
+  gluLookAt(glcam_posX_, glcam_posY_, glcam_posZ_, glcam_foaX_, glcam_foaY_, glcam_foaZ_, glcam_upX_, glcam_upY_, glcam_upZ_);
+}
+
 void DrawArea::glMultMatrix(const SE3 &se3) {
   Eigen::Matrix3d rot = se3.GetRotation();
   Eigen::Vector3d t = se3.GetTranslation();
@@ -374,6 +368,7 @@ bool DrawArea::on_motion_notify(GdkEventMotion* event) {
 
   old_x_ = x;
   old_y_ = y;
+  follow_ = false;
 
   return true;
 }
@@ -404,6 +399,7 @@ bool DrawArea::on_drawarea_scroll(GdkEventScroll * event) {
     glcam_posY_ = glcam_posY_ - vy;
     glcam_posZ_ = glcam_posZ_ - vz;
   }
+  follow_ = false;
 
   return true;
 }

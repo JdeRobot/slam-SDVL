@@ -57,10 +57,10 @@ class DrawArea: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawArea> {
   virtual bool on_motion_notify(GdkEventMotion* event);
   virtual bool on_drawarea_scroll(GdkEventScroll * event);
 
+  void SetCameraPose(const SE3 &se3);
   void glMultMatrix(const SE3 &se3);
   bool OnTimeout();
 
-  void DrawWorld();
   void DrawMap();
   void DrawFrustrum(double depth);
   void DrawCamera(const SE3 &se3, bool slim, bool colored);
@@ -84,6 +84,11 @@ class DrawArea: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawArea> {
   double glcam_foaX_;
   double glcam_foaY_;
   double glcam_foaZ_;
+  double glcam_upX_;
+  double glcam_upY_;
+  double glcam_upZ_;
+
+  bool follow_;
 
   std::vector<std::pair<sdvl::SE3, bool>> camera_trail_;    // Camera poses
   std::vector<Eigen::Vector3d> points_;                     // Points positions
