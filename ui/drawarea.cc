@@ -32,7 +32,10 @@ DrawArea::DrawArea(Camera * camera) : Gtk::DrawingArea(), Gtk::GL::Widget<DrawAr
   height_ = 480;
   refresh_time_ = 100;  // ms
   camera_ = camera;
+
   follow_ = true;
+  init_roll_ = false;
+  last_roll_ = 0.0;
 
   // Resize drawing area
   set_size_request(640, 480);
@@ -265,12 +268,14 @@ void DrawArea::DrawFrustrum(double depth) {
 void DrawArea::SetCameraPose(const SE3 &se3) {
   Eigen::Matrix3d rot = se3.GetRotation();
   Eigen::Vector3d t = se3.GetTranslation();
- 
-  if(follow_) {
+
+  if (follow_) {
+    // OpenGL camera looking at SLAM camera
     glcam_foaX_ = t(0);
     glcam_foaY_ = t(1);
     glcam_foaZ_ = t(2);
 
+    // Set OpenGL camera behind SLAM camera
     Eigen::Matrix4d rt;
     Eigen::Vector4d dist(0, 0, -1.5, 1);
     rt << rot(0, 0), rot(0, 1), rot(0, 2), t(0), 
@@ -278,15 +283,41 @@ void DrawArea::SetCameraPose(const SE3 &se3) {
           rot(2, 0), rot(2, 1), rot(2, 2), t(2),
           0, 0, 0, 1;
 
-    Eigen::MatrixXd res = rt*dist;
+    Eigen::MatrixXd pos = rt*dist;
 
-    glcam_posX_ = res(0);
-    glcam_posY_ = res(1);
-    glcam_posZ_ = res(2);
+    glcam_posX_ = pos(0);
+    glcam_posY_ = pos(1);
+    glcam_posZ_ = pos(2);
+
+    // Set OpenGL camera roll
+    Eigen::Vector3d euler = rot.eulerAngles(1, 0, 0);
+    if (CheckRoll(euler(2)))
+      glRotatef(last_roll_, 0.0f, 0.0f, 1.0f);
   }
 
   // Cam position, central point, vector up
   gluLookAt(glcam_posX_, glcam_posY_, glcam_posZ_, glcam_foaX_, glcam_foaY_, glcam_foaZ_, glcam_upX_, glcam_upY_, glcam_upZ_);
+}
+
+bool DrawArea::CheckRoll(double roll) {
+  double rolldeg = roll*180.0/M_PI;
+
+  if (!init_roll_ && rolldeg == 0.0)
+    return false;
+
+  // Roll always positive in range [0, 360]
+  rolldeg = rolldeg + 180.0;
+  //rolldeg = rolldeg + 180.0; // Head up?
+
+  // Sometimes roll changes +-180 degrees, trick to detect when it changes
+  if (init_roll_ && abs(rolldeg - last_roll_) > 90.0)
+    rolldeg += 180.0;
+  if (rolldeg > 360.0)
+    rolldeg -= 360.0;
+
+  last_roll_ = rolldeg;
+  init_roll_ = true;
+  return true;
 }
 
 void DrawArea::glMultMatrix(const SE3 &se3) {
