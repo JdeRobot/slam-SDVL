@@ -335,6 +335,10 @@ void SDVL::GetLastFeatures(vector<Eigen::Vector3i> * positions) {
       pos = (*feature)->GetPosition();
       positions->push_back(Eigen::Vector3i(pos(0), pos(1), point->GetStatus()));
     }
+    vector<Eigen::Vector2d>& outliers = last_frame_->GetOutliers();
+    for (auto outlier=outliers.begin(); outlier != outliers.end(); outlier++) {  
+      positions->push_back(Eigen::Vector3i((*outlier)(0), (*outlier)(1), Point::P_OUTLIER));
+    }
   }
   map_.Unlock();
 }

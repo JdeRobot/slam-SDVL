@@ -60,6 +60,7 @@ class Frame {
   inline std::vector<std::vector<Eigen::Vector2i>>& GetCorners() { return corners_; }
   inline std::vector<std::vector<int>>& GetCornersRows() { return corners_rows_; }
   inline std::vector<Eigen::Vector3i>& GetFilteredCorners() { return filtered_corners_; }
+  inline std::vector<Eigen::Vector2d>& GetOutliers() { return outliers_; }
 
   inline std::vector<std::vector<std::vector<uchar>>>& GetDescriptors() { return descriptors_; }
   inline std::vector<std::vector<uchar>>& GetFilteredDescriptors() { return filtered_descriptors_; }
@@ -90,9 +91,14 @@ class Frame {
     return pose_.GetQuaternion().angularDistance(frame.pose_.GetQuaternion());
   }
 
-  // Add a feature to the frame
+  // Add a feature to frame
   inline void AddFeature(const std::shared_ptr<Feature> &feature) {
     features_.push_back(feature);
+  }
+
+  // Add outlier to frame
+  inline void AddOutlier(const Eigen::Vector2d &pos) {
+    outliers_.push_back(pos);
   }
 
   // Return number of features
@@ -147,10 +153,11 @@ class Frame {
   int height_;                      // Image width in first pyramid level
   SE3 pose_;                        // Frame to world pose
 
-  std::vector<std::shared_ptr<Feature>> features_;     // Features detected in this frame
+  std::vector<std::shared_ptr<Feature>> features_;      // Features detected in this frame
   std::vector<std::vector<Eigen::Vector2i>> corners_;   // Corners detected in each pyramid level
   std::vector<std::vector<int>> corners_rows_;          // Pointers to corners in each row
   std::vector<Eigen::Vector3i> filtered_corners_;       // Corners filtered. Third parameter to store level
+  std::vector<Eigen::Vector2d> outliers_;               // Outliers, only for DEBUG
 
   std::vector<std::vector<std::vector<uchar>>> descriptors_;  // ORB descriptor for each corner
   std::vector<std::vector<uchar>> filtered_descriptors_;      // ORB descriptors for fileted corners

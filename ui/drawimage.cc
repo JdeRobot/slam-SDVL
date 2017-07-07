@@ -88,7 +88,7 @@ void DrawImage::SetFeatures(const vector<Eigen::Vector3i> &features) {
   for (vector<Eigen::Vector3i>::const_iterator it=features.begin(); it != features.end(); it++) {
     if ((*it)(2) == Point::P_FOUND)
       color = CV_RGB(0, 255, 0);
-    else if ((*it)(2) == Point::P_NOT_FOUND)
+    else if ((*it)(2) == Point::P_NOT_FOUND || (*it)(2) == Point::P_OUTLIER)
       color = CV_RGB(255, 0, 0);
     else
       color = CV_RGB(255, 255, 0);

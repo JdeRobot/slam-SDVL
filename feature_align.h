@@ -74,7 +74,7 @@ class FeatureAlign {
                     std::vector<std::shared_ptr<Feature>> *outliers);
 
   // Remove outliers
-  void RemoveOutliers(std::vector<std::shared_ptr<Feature>> *outliers);
+  void RemoveOutliers(const std::shared_ptr<Frame> &frame, std::vector<std::shared_ptr<Feature>> *outliers);
 
   // Get best point (if exists) from given cell
   void GetPointFromCell(GridCell *cell, PointInfo *finfo);

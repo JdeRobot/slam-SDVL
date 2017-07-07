@@ -77,7 +77,7 @@ bool FeatureAlign::OptimizePose(const shared_ptr<Frame> &frame) {
     OptimizePose(frame, &inliers_, &outliers_);
     cout << "[DEBUG] Rescued inliers: " << inliers_.size() << " outliers: " << outliers_.size() << endl;
   }
-  RemoveOutliers(&outliers_);
+  RemoveOutliers(frame, &outliers_);
   return true;
 }
 
@@ -229,14 +229,16 @@ bool FeatureAlign::RescueOutliers(const shared_ptr<Frame> &frame, vector<shared_
   return ninliers > init_inliers;
 }
 
-void FeatureAlign::RemoveOutliers(vector<shared_ptr<Feature>> *outliers) {
+void FeatureAlign::RemoveOutliers(const shared_ptr<Frame> &frame, vector<shared_ptr<Feature>> *outliers) {
   for (auto it=outliers->begin(); it != outliers->end(); it++) {
-    shared_ptr<Point> f = (*it)->GetPoint();
-    if (!f)
+    shared_ptr<Point> p = (*it)->GetPoint();
+    if (!p)
       continue;
 
     // Point to feature reference was not yet created, so we don't need to delete it
     (*it)->SetPoint(nullptr);
+    p->SetStatus(Point::P_NOT_FOUND);
+    frame->AddOutlier((*it)->GetPosition());
   }
 }
 

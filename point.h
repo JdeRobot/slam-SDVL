@@ -42,7 +42,8 @@ class Point {
     P_FOUND,
     P_NOT_FOUND,
     P_SEEN,
-    P_UNSEEN
+    P_UNSEEN,
+    P_OUTLIER
   };
 
   Point();
