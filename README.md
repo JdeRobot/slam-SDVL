@@ -88,7 +88,7 @@ sudo make install
 
 C++ framework for optimizing graph-based nonlinear error functions. It has been used to optimize map with Bundle Adjustment.
 
-This library is included in ''extra'' folder.
+This library is included in ''extra'' folder with some modifications made by [ORBSLAM authors](https://github.com/raulmur/ORB_SLAM2).
 
 ## 3. Install
 
