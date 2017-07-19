@@ -19,29 +19,24 @@
  *
  */
 
-#ifndef SDVL_UI_DRAWAREA_H_
-#define SDVL_UI_DRAWAREA_H_
+#ifndef SDVL_UI_DRAWSCENE_H_
+#define SDVL_UI_DRAWSCENE_H_
 
 #include <string>
 #include <iostream>
 #include <utility>
 #include <vector>
 #include <pthread.h>
-#include <gtkmm.h>
-#include <gtkglmm.h>
-#include <gdkglmm.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glut.h>
+#include <pangolin/pangolin.h>
 #include "../camera.h"
 #include "../extra/se3.h"
 
 namespace sdvl {
 
-class DrawArea: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawArea> {
+class DrawScene {
  public:
-  explicit DrawArea(Camera * camera);
-  virtual ~DrawArea();
+  explicit DrawScene(Camera * camera);
+  virtual ~DrawScene();
 
   // Save camera positions and points
   void SetCameraTrail(const std::vector<std::pair<sdvl::SE3, bool>> &trail);
@@ -51,53 +46,31 @@ class DrawArea: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawArea> {
   inline void Lock() { pthread_mutex_lock(&mutex_3D); }
   inline void UnLock() { pthread_mutex_unlock(&mutex_3D); }
 
+  void ShowScene();
+
  protected:
-  // Override default signal handler
-  virtual bool on_expose_event(GdkEventExpose* event);
-  virtual bool on_motion_notify(GdkEventMotion* event);
-  virtual bool on_drawarea_scroll(GdkEventScroll * event);
+  // Convert SE3 to OpenGL matrix
+  void GetCameraMatrix(const SE3 &se3, pangolin::OpenGlMatrix *m);
 
-  void SetCameraPose(const SE3 &se3);
-  bool CheckRoll(double roll);
-  void glMultMatrix(const SE3 &se3);
-  bool OnTimeout();
-
-  void DrawMap();
-  void DrawFrustrum(double depth);
+  // Draw elements in OpenGL
+  void DrawFrustrum(double depth, bool tail);
   void DrawCamera(const SE3 &se3, bool slim, bool colored);
   void DrawPoint(const Eigen::Vector3d &pos);
 
   pthread_mutex_t mutex_3D;
-  int refresh_time_;
-  int width_;
-  int height_;
-
-  double radius_;
-  double latitud_;
-  double longitud_;
-  double old_x_;
-  double old_y_;
 
   Camera * camera_;
-  double glcam_posX_;
-  double glcam_posY_;
-  double glcam_posZ_;
-  double glcam_foaX_;
-  double glcam_foaY_;
-  double glcam_foaZ_;
-  double glcam_upX_;
-  double glcam_upY_;
-  double glcam_upZ_;
-
-  bool follow_;
-  bool init_roll_;
-  double last_roll_;
-
   std::vector<std::pair<sdvl::SE3, bool>> camera_trail_;    // Camera poses
   std::vector<Eigen::Vector3d> points_;                     // Points positions
   sdvl::SE3 pose_;
+
+  // Pangolin parameters
+  pangolin::OpenGlRenderState *s_cam_;
+  pangolin::View d_cam_;
+  pangolin::Var<bool> *follow_;
+  pangolin::Var<bool> *show_lines_;
 };
 
 }  // namespace sdvl
 
-#endif  // SDVL_UI_DRAWAREA_H_
+#endif  // SDVL_UI_DRAWSCENE_H_

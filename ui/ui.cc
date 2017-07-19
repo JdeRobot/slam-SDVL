@@ -28,35 +28,17 @@ using std::endl;
 
 namespace sdvl {
 
-UI::UI(Camera* camera, SDVL * handler, bool show) : gtkmain_(0, 0) {
+UI::UI(Camera* camera, SDVL * handler, bool show) {
   camera_ = camera;
   handler_ = handler;
+  visible_ = true;
 
   pthread_mutex_init(&mutex_display_, NULL);
   pthread_mutex_init(&mutex_handler_, NULL);
 
-  // Init OpenGL
-  if (!Gtk::GL::init_check(NULL, NULL)) {
-    cerr << "Couldn't initialize GL" << endl;
-    exit(1);
-  }
-
-  // Create widgets
-  mainwindow_ = new Gtk::Window();
-  main_table_ = new Gtk::Table(1, 2, true);
-  drawarea_ = new DrawArea(camera_);
+  // Create elements
+  drawscene_ = new DrawScene(camera_);
   drawimage_ = new DrawImage(camera_);
-  mainwindow_->add(*main_table_);
-  main_table_->attach(*drawimage_, 0, 1, 0, 1);
-  main_table_->attach(*drawarea_, 1, 2, 0, 1);
-
-  if (show) {
-    // Show window
-    mainwindow_->show();
-    main_table_->show();
-    drawarea_->show();
-    drawimage_->show();
-  }
 }
 
 UI::~UI() {
@@ -93,9 +75,9 @@ void UI::Update(const cv::Mat &image) {
 
   // Save parameters
   pthread_mutex_lock(&mutex_display_);
-  drawarea_->SetCameraTrail(camera_trail);
-  drawarea_->SetPoints(points);
-  drawarea_->SetCurrentPose(pose);
+  drawscene_->SetCameraTrail(camera_trail);
+  drawscene_->SetPoints(points);
+  drawscene_->SetCurrentPose(pose);
   drawimage_->SetFeatures(features);
   drawimage_->SetCurrentPose(pose.Inverse());
   drawimage_->SetTrackingQuality(quality);
@@ -103,15 +85,14 @@ void UI::Update(const cv::Mat &image) {
 }
 
 bool UI::IsVisible() {
-  return mainwindow_->is_visible();
+  return visible_;
 }
 
 void UI::Display() {
-  // Show window
+  // Update
   pthread_mutex_lock(&mutex_display_);
-  mainwindow_->resize(1, 1);
-  while (gtkmain_.events_pending())
-    gtkmain_.iteration();
+  drawscene_->ShowScene();
+  drawimage_->ShowImage();
   pthread_mutex_unlock(&mutex_display_);
 }
 

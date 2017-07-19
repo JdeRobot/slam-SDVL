@@ -25,13 +25,6 @@
 #include <string>
 #include <iostream>
 #include <vector>
-#include <pthread.h>
-#include <gtkmm.h>
-#include <gtkglmm.h>
-#include <gdkglmm.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
-#include <GL/glut.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv/cv.h>
@@ -43,7 +36,7 @@
 
 namespace sdvl {
 
-class DrawImage: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawImage> {
+class DrawImage {
  public:
   explicit DrawImage(Camera * camera);
   virtual ~DrawImage();
@@ -57,15 +50,10 @@ class DrawImage: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawImage> {
   inline void Lock() { pthread_mutex_lock(&mutex_3D_); }
   inline void Unlock() { pthread_mutex_unlock(&mutex_3D_); }
 
+  // Show currrent image
+  void ShowImage();
+
  protected:
-  // Override default signal handler
-  virtual bool on_expose_event(GdkEventExpose* event);
-  bool OnTimeout();
-
-  void DrawBackground(double width, double height);
-  // Turn a cv::Mat into a texture and return the texture ID
-  GLuint MatToTexture(const cv::Mat &mat);
-
   // Change channel color
   void SetChannel(cv::Mat *mat, unsigned int channel, unsigned char value);
 
@@ -79,9 +67,9 @@ class DrawImage: public Gtk::DrawingArea, public Gtk::GL::Widget<DrawImage> {
 
   // Image
   Camera * camera_;
-  int width_;
-  int height_;
   cv::Mat image_;
+
+  bool updated_;
 };
 
 }  // namespace sdvl

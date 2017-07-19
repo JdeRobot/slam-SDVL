@@ -24,15 +24,9 @@
 
 #include <string>
 #include <iostream>
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv/cv.h>
-#include <opencv/cvaux.h>
-#include <pthread.h>
-#include <gtkmm.h>
 #include "../camera.h"
 #include "../sdvl.h"
-#include "./drawarea.h"
+#include "./drawscene.h"
 #include "./drawimage.h"
 
 namespace sdvl {
@@ -44,7 +38,7 @@ class UI {
 
   void SetHandler(SDVL * handler);
 
-  // Return true if the windows is visible
+  // Return true if UI is visible
   bool IsVisible();
 
   // Update information to display
@@ -54,14 +48,11 @@ class UI {
   void Display();
 
  private:
-  Gtk::Main gtkmain_;
-  Gtk::Window* mainwindow_;
-  Gtk::Table * main_table_;
-
-  DrawArea * drawarea_;
+  DrawScene * drawscene_;
   DrawImage * drawimage_;
   Camera * camera_;
   SDVL * handler_;
+  bool visible_;
 
   pthread_mutex_t mutex_display_;
   pthread_mutex_t mutex_handler_;
