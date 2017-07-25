@@ -95,8 +95,7 @@ This library is included in ''extra'' folder with some modifications made by [OR
 Download from [github](https://github.com/JdeRobot/slam)
 
 ```
-git clone https://github.com/JdeRobot/slam.git
-cd slam
+git clone https://github.com/JdeRobot/slam-SDVL.git
 ```
 
 ### G2o compilation
@@ -105,7 +104,7 @@ cd slam
 Install g2o dependency from ''extra'' folder:
 
 ```
-cd sdvl/extra/g2o
+cd slam-SDVL/extra/g2o
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -118,7 +117,7 @@ make
 Run these commands:
 
 ```
-cd sdvl
+cd slam-SDVL
 mkdir build
 cd build
 cmake ..
