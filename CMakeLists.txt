@@ -4,7 +4,6 @@ SET(CMAKE_MODULE_PATH ${CMAKE_INSTALL_PREFIX}/lib/cmake/ )
 include (FindPkgConfig)
 if (PKG_CONFIG_FOUND)
   FIND_PACKAGE(OpenCV REQUIRED)
-  FIND_PACKAGE(Boost REQUIRED COMPONENTS system)
   pkg_check_modules(Eigen REQUIRED eigen3)
   pkg_check_modules(Config++ REQUIRED libconfig++)
   FIND_PACKAGE(Pangolin REQUIRED)
@@ -21,7 +20,6 @@ INCLUDE_DIRECTORIES(
   /usr/local/include
   ${OpenCV_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
-  ${Boost_INCLUDE_DIRS}
   ${Config++_INCLUDE_DIRS}
   ${Pangolin_INCLUDE_DIRS}
 )
@@ -44,7 +42,6 @@ LIST(APPEND SOURCEFILES
 LIST(APPEND LINK_LIBS 
   ${OpenCV_LIBRARIES}
   ${Eigen_LIBRARIES}
-  ${Boost_LIBRARIES}
   ${Config++_LIBRARIES}
   ${Pangolin_LIBRARIES}
   ${PROJECT_SOURCE_DIR}/extra/g2o/lib/libg2o.so

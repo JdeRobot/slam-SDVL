@@ -13,7 +13,7 @@ The following dependencies are necessary for running SDVL in debian-based distri
 Install all dependencies (except Pangolin and g2o) using this command:
 
 ```
-sudo apt-get install cmake libeigen3-dev libopencv-dev libboost-system-dev libconfig++-dev freeglut3-dev libglew-dev
+sudo apt-get install cmake libeigen3-dev libopencv-dev libconfig++-dev freeglut3-dev libglew-dev
 ```
 
 ### 2.1 CMake
@@ -41,15 +41,6 @@ Computer vision library employed to manipulate images
 
 ```
 sudo apt-get install libopencv-dev
-```
-
-### 2.4 Boost
----
-
-It provides portable C++ source libraries.
-
-```
-sudo apt-get install libboost-system-dev
 ```
 
 ### 2.5 Libconfig
