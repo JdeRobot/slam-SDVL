@@ -25,13 +25,16 @@
 #include "./camera.h"
 #include "./video_source.h"
 #include "./config.h"
-#include "ui/ui.h"
 #include "extra/timer.h"
+#ifdef USE_GUI
+#include "ui/ui.h"
+#endif
 
 using std::cout;
 using std::cerr;
 using std::endl;
 
+#ifdef USE_GUI
 void* callback_ui(void* obj);
 
 class UIThread {
@@ -90,9 +93,12 @@ void* callback_ui(void* obj) {
   static_cast<UIThread*>(obj)->main();
   return (0);
 }
+#endif
 
 int main(int argc, char** argv) {
+  #ifdef USE_GUI
   UIThread ui;
+  #endif
   cv::Mat img, imgu;
   sdvl::VideoSource * video;
   sdvl::SDVL * handler = nullptr;
@@ -112,15 +118,19 @@ int main(int argc, char** argv) {
   video = new sdvl::VideoSource();
   camera = new sdvl::Camera();
 
+  #ifdef USE_GUI
   // Start UI
   ui.start(camera, nullptr);
   usleep(1000 * 1000);
+  #endif
 
   // Start algorithm
   handler = new sdvl::SDVL(camera);
   if (!sequential)
     handler->Start();
+  #ifdef USE_GUI
   ui.SetHandler(handler);
+  #endif
 
   while (!exit) {
     // Get frame
@@ -147,8 +157,10 @@ int main(int argc, char** argv) {
     if (sequential)
       handler->Mapping();
 
+    #ifdef USE_GUI
     // Update UI
     ui.Update(imgu);
+    #endif
 
     // Sleep until next frame
     if (!sequential && timer.GetMsTime() < it_time)
@@ -160,7 +172,9 @@ int main(int argc, char** argv) {
   // Stop threads
   if (handler != nullptr && !sequential)
     handler->Stop();
+  #ifdef USE_GUI
   ui.stop();
+  #endif
 
   return 0;
 }
