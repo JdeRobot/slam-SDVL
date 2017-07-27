@@ -25,6 +25,7 @@
 #include <string>
 #include <iostream>
 #include <vector>
+#include <mutex>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv/cv.h>
@@ -47,9 +48,6 @@ class DrawImage {
   inline void SetCurrentPose(const sdvl::SE3 &pose) { pose_ = pose; }
   inline void SetTrackingQuality(SDVL::TrackingQuality quality) { quality_ = quality; }
 
-  inline void Lock() { pthread_mutex_lock(&mutex_3D_); }
-  inline void Unlock() { pthread_mutex_unlock(&mutex_3D_); }
-
   // Show currrent image
   void ShowImage();
 
@@ -60,7 +58,7 @@ class DrawImage {
   // Project 3d point into image
   bool Project(double x, double y, double z, cv::Point *p);
 
-  pthread_mutex_t mutex_3D_;
+  std::mutex mutex_3D_;
   int refresh_time_;
   sdvl::SE3 pose_;
   SDVL::TrackingQuality quality_;

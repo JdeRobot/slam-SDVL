@@ -13,13 +13,13 @@ The following dependencies are necessary for running SDVL in debian-based distri
 Install all dependencies (except Pangolin and g2o) using this command:
 
 ```
-sudo apt-get install cmake libeigen3-dev libopencv-dev libboost-system-dev libconfig++-dev freeglut3-dev libglew-dev
+sudo apt-get install cmake libeigen3-dev libopencv-dev freeglut3-dev libglew-dev
 ```
 
 ### 2.1 CMake
 ---
 
-Tool designed to build software
+Tool designed to build software.
 
 ```
 sudo apt-get install cmake
@@ -37,31 +37,13 @@ sudo apt-get install libeigen3-dev
 ### 2.3 OpenCV
 ---
 
-Computer vision library employed to manipulate images
+Computer vision library employed to manipulate images.
 
 ```
 sudo apt-get install libopencv-dev
 ```
 
-### 2.4 Boost
----
-
-It provides portable C++ source libraries.
-
-```
-sudo apt-get install libboost-system-dev
-```
-
-### 2.5 Libconfig
----
-
-C/C++ configuration file library, used to read SDVL configuration parameters.
-
-```
-sudo apt-get install libconfig++-dev 
-```
-
-### 2.6 Pangolin
+### 2.4 Pangolin
 ---
 
 Library for managing OpenGL display, employed for visualization and user interface.
@@ -84,7 +66,7 @@ cmake --build .
 sudo make install
 ```
 
-### 2.7 G2o
+### 2.5 G2o
 
 C++ framework for optimizing graph-based nonlinear error functions. It has been used to optimize map with Bundle Adjustment.
 
@@ -95,8 +77,7 @@ This library is included in ''extra'' folder with some modifications made by [OR
 Download from [github](https://github.com/JdeRobot/slam)
 
 ```
-git clone https://github.com/JdeRobot/slam.git
-cd slam
+git clone https://github.com/JdeRobot/slam-SDVL.git
 ```
 
 ### G2o compilation
@@ -105,7 +86,7 @@ cd slam
 Install g2o dependency from ''extra'' folder:
 
 ```
-cd sdvl/extra/g2o
+cd slam-SDVL/extra/g2o
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
@@ -118,7 +99,7 @@ make
 Run these commands:
 
 ```
-cd sdvl
+cd slam-SDVL
 mkdir build
 cd build
 cmake ..

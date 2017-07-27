@@ -20,27 +20,28 @@
  */
 
 #include <iostream>
-#include <pthread.h>
+#include <thread>
 #include "./sdvl.h"
 #include "./camera.h"
 #include "./video_source.h"
 #include "./config.h"
-#include "ui/ui.h"
 #include "extra/timer.h"
+#ifdef USE_GUI
+#include "ui/ui.h"
+#endif
 
 using std::cout;
 using std::cerr;
 using std::endl;
 
-void* callback_ui(void* obj);
-
+#ifdef USE_GUI
 class UIThread {
  public:
   UIThread() {
     running_ = false;
   }
 
-  int main() {
+  void Run() {
     // Create user interface
     ui_ = new sdvl::UI(camera_, handler_, true);
     running_ = true;
@@ -52,17 +53,15 @@ class UIThread {
 
       usleep(100 * 1000);
     }
-
-    return 0;
   }
 
-  void start(sdvl::Camera * camera, sdvl::SDVL * handler) {
+  void Start(sdvl::Camera * camera, sdvl::SDVL * handler) {
     camera_ = camera;
     handler_ = handler;
-    pthread_create(&thread_, 0, &callback_ui, this);
+    thread_ = new std::thread(&UIThread::Run,this);
   }
 
-  void stop() {
+  void Stop() {
     running_ = false;
   }
 
@@ -82,17 +81,15 @@ class UIThread {
   sdvl::Camera * camera_;
   sdvl::SDVL * handler_;
 
-  pthread_t thread_;
+  std::thread* thread_;
   bool running_;
 };
-
-void* callback_ui(void* obj) {
-  static_cast<UIThread*>(obj)->main();
-  return (0);
-}
+#endif
 
 int main(int argc, char** argv) {
+  #ifdef USE_GUI
   UIThread ui;
+  #endif
   cv::Mat img, imgu;
   sdvl::VideoSource * video;
   sdvl::SDVL * handler = nullptr;
@@ -112,15 +109,19 @@ int main(int argc, char** argv) {
   video = new sdvl::VideoSource();
   camera = new sdvl::Camera();
 
+  #ifdef USE_GUI
   // Start UI
-  ui.start(camera, nullptr);
+  ui.Start(camera, nullptr);
   usleep(1000 * 1000);
+  #endif
 
   // Start algorithm
   handler = new sdvl::SDVL(camera);
   if (!sequential)
     handler->Start();
+  #ifdef USE_GUI
   ui.SetHandler(handler);
+  #endif
 
   while (!exit) {
     // Get frame
@@ -147,8 +148,10 @@ int main(int argc, char** argv) {
     if (sequential)
       handler->Mapping();
 
+    #ifdef USE_GUI
     // Update UI
     ui.Update(imgu);
+    #endif
 
     // Sleep until next frame
     if (!sequential && timer.GetMsTime() < it_time)
@@ -160,7 +163,9 @@ int main(int argc, char** argv) {
   // Stop threads
   if (handler != nullptr && !sequential)
     handler->Stop();
-  ui.stop();
+  #ifdef USE_GUI
+  ui.Stop();
+  #endif
 
   return 0;
 }

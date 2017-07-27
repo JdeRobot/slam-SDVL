@@ -52,30 +52,25 @@ DrawScene::DrawScene(Camera * camera) {
   d_cam_ = pangolin::CreateDisplay()
           .SetBounds(0.0, 1.0, pangolin::Attach::Pix(175), 1.0, -1024.0f/768.0f)
           .SetHandler(new pangolin::Handler3D(*s_cam_));
-
-  pthread_mutex_init(&mutex_3D, NULL);
 }
 
 DrawScene::~DrawScene() {
 }
 
 void DrawScene::SetCameraTrail(const vector<std::pair<sdvl::SE3, bool>> &trail) {
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_3D_);
   camera_trail_.clear();
 
   for (auto it=trail.begin(); it != trail.end(); it++)
     camera_trail_.push_back(std::make_pair(it->first, it->second));
-  UnLock();
 }
 
 void DrawScene::SetPoints(const vector<Eigen::Vector3d> &points) {
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_3D_);
   points_.clear();
 
   for (vector<Eigen::Vector3d>::const_iterator it=points.begin(); it != points.end(); it++)
     points_.push_back((*it));
-
-  UnLock();
 }
 
 void DrawScene::ShowScene() {
@@ -92,41 +87,42 @@ void DrawScene::ShowScene() {
   d_cam_.Activate(*s_cam_);
   glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
-  Lock();
+  // Draw saved data
+  {
+    std::unique_lock<std::mutex> lock(mutex_3D_);
 
-  // Draw camera trail
-  for (auto it=camera_trail_.begin(); it != camera_trail_.end(); it++)
-    DrawCamera(it->first, true, it->second);
+    // Draw camera trail
+    for (auto it=camera_trail_.begin(); it != camera_trail_.end(); it++)
+      DrawCamera(it->first, true, it->second);
 
-  // Draw current position
-  DrawCamera(pose_, false, false);
+    // Draw current position
+    DrawCamera(pose_, false, false);
 
-  glPointSize(2);
-  glLineWidth(1);
-  for (auto it=points_.begin(); it != points_.end(); it+=2) {
-    Eigen::Vector3d diff = *it - *(it+1);
-    if (diff.dot(diff) < 1e-10) {
-      // Draw point in space
-      glColor3f(0.5, 0.0, 1.0);
-      glBegin(GL_POINTS);
-      DrawPoint(*it);
-      glEnd();
-    } else {
-      if (*show_lines_) {
-        // Draw line
-        glColor3f(1.0, 0.0, 0.2);
-        glBegin(GL_LINES);
+    glPointSize(2);
+    glLineWidth(1);
+    for (auto it=points_.begin(); it != points_.end(); it+=2) {
+      Eigen::Vector3d diff = *it - *(it+1);
+      if (diff.dot(diff) < 1e-10) {
+        // Draw point in space
+        glColor3f(0.5, 0.0, 1.0);
+        glBegin(GL_POINTS);
         DrawPoint(*it);
-        DrawPoint(*(it+1));
         glEnd();
+      } else {
+        if (*show_lines_) {
+          // Draw line
+          glColor3f(1.0, 0.0, 0.2);
+          glBegin(GL_LINES);
+          DrawPoint(*it);
+          DrawPoint(*(it+1));
+          glEnd();
+        }
       }
     }
+
+    glColor3f(0, 0, 0);
+    glLineWidth(1);
   }
-
-  glColor3f(0, 0, 0);
-  glLineWidth(1);
-
-  UnLock();
 
   pangolin::FinishFrame();
 }

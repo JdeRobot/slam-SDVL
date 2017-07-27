@@ -107,6 +107,9 @@ class Point {
   // Compute tau
   double ComputeTau(const SE3 &pose, const Eigen::Vector3d &v, double depth, double px_error_angle);
 
+  // Probability density function (PDF) for normal distribution
+  double PDFNormal(double mean, double sd, double x);
+
   int id_;                      // Point unique id
   PointStatus status_;          // Point status in last frame
   bool delete_;                 // True if will be deleted

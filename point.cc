@@ -19,7 +19,6 @@
  *
  */
 
-#include <boost/math/distributions.hpp>
 #include "./point.h"
 #include "./config.h"
 #include "extra/utils.h"
@@ -74,10 +73,10 @@ void Point::Update(const shared_ptr<Frame> &frame, double depth, double px_error
   double norm_scale = sqrt(sigma2_ + tau2);
   if (std::isnan(norm_scale))
     return;
-  boost::math::normal_distribution<double> nd(rho_, norm_scale);
+
   double s2 = 1./(1./sigma2_ + 1./tau2);
   double m = s2*(rho_/sigma2_ + x/tau2);
-  double C1 = a_/(a_+b_) * boost::math::pdf(nd, x);
+  double C1 = a_/(a_+b_) * PDFNormal(rho_, norm_scale, x);
   double C2 = b_/(a_+b_) * 1./z_range_;
   double normalization_constant = C1 + C2;
   C1 /= normalization_constant;
@@ -181,5 +180,23 @@ double Point::ComputeTau(const SE3 &pose, const Eigen::Vector3d &v, double depth
   double depth_plus = t_norm*sin(beta_plus)/sin(gamma_plus);  // law of sines
   return (depth_plus - depth);  // tau
 }
+
+double Point::PDFNormal(double mean, double sd, double x) {
+  const double PI = 3.14159265;
+  double result = 0.0;
+
+  if (sd <= 0)
+    return result;
+
+  // pdf = e^(-(x-m)^2/(2s^2))/(s*sqrt(2*pi)
+  double exponent = x - mean;
+  exponent *= -exponent;
+  exponent /= 2 * sd * sd;
+
+  result = exp(exponent);
+  result /= sd * sqrt(2.0 * PI);
+  return result;
+}
+
 
 }  // namespace sdvl

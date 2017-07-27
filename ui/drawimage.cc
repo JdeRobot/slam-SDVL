@@ -36,9 +36,6 @@ DrawImage::DrawImage(Camera * camera) {
 
   cv::namedWindow("SDVL: Current Frame");
 
-  // Set 3D
-  pthread_mutex_init(&mutex_3D_, NULL);
-
   // Image
   image_ = cv::Mat(Config::GetCameraParameters().width, Config::GetCameraParameters().height, CV_8UC3);
 }
@@ -48,17 +45,15 @@ DrawImage::~DrawImage() {
 
 void DrawImage::SetBackground(const cv::Mat &src) {
   // Convert to RGB
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_3D_);
   cv::cvtColor(src, image_, CV_GRAY2RGB);
-  Unlock();
-
   updated_ = true;
 }
 
 void DrawImage::SetFeatures(const vector<Eigen::Vector3i> &features) {
   CvScalar color;
 
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_3D_);
   for (vector<Eigen::Vector3i>::const_iterator it=features.begin(); it != features.end(); it++) {
     if ((*it)(2) == Point::P_FOUND)
       color = CV_RGB(0, 255, 0);
@@ -68,7 +63,6 @@ void DrawImage::SetFeatures(const vector<Eigen::Vector3i> &features) {
       color = CV_RGB(255, 255, 0);
     cv::circle(image_, cvPoint((*it)(0), (*it)(1)), 3, color, 1, CV_AA, 0);
   }
-  Unlock();
 }
 
 void DrawImage::ShowImage() {
@@ -86,7 +80,7 @@ void DrawImage::ShowImage() {
 }
 
 void DrawImage::SetChannel(cv::Mat *mat, unsigned int channel, unsigned char value) {
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_3D_);
   const int cols = mat->cols;
   const int step = mat->channels();
   const int rows = mat->rows;
@@ -97,7 +91,6 @@ void DrawImage::SetChannel(cv::Mat *mat, unsigned int channel, unsigned char val
     for (; p_row != row_end; p_row += step)
       *p_row = value;
   }
-  Unlock();
 }
 
 bool DrawImage::Project(double x, double y, double z, cv::Point *p) {

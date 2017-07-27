@@ -51,6 +51,8 @@ VideoSource::VideoSource() {
     std::stringstream ss;
     ss << path_ << filename_;
     file_.open(ss.str());
+    if (!file_.is_open())
+      cerr << "[ERROR] File not found: " << ss.str() << endl;
   }
 }
 
