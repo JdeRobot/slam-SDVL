@@ -7,7 +7,6 @@ if (PKG_CONFIG_FOUND)
   FIND_PACKAGE(Threads)
   FIND_PACKAGE(OpenCV REQUIRED)
   pkg_check_modules(Eigen REQUIRED eigen3)
-  pkg_check_modules(Config++ REQUIRED libconfig++)
   if(USE_GUI)
     FIND_PACKAGE(Pangolin REQUIRED)
   endif()
@@ -28,7 +27,6 @@ INCLUDE_DIRECTORIES(
   /usr/local/include
   ${OpenCV_INCLUDE_DIRS}
   ${Eigen_INCLUDE_DIRS}
-  ${Config++_INCLUDE_DIRS}
   if(USE_GUI)
     ${Pangolin_INCLUDE_DIRS}
   endif()
@@ -57,7 +55,6 @@ endif()
 LIST(APPEND LINK_LIBS 
   ${OpenCV_LIBRARIES}
   ${Eigen_LIBRARIES}
-  ${Config++_LIBRARIES}
   ${Pangolin_LIBRARIES}
   ${PROJECT_SOURCE_DIR}/extra/g2o/lib/libg2o.so
   ${CMAKE_THREAD_LIBS_INIT}

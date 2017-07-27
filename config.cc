@@ -19,7 +19,10 @@
  *
  */
 
-#include <libconfig.h++>
+#include <opencv2/core/core.hpp>
+#include <opencv2/highgui/highgui.hpp>
+#include <opencv/cv.h>
+#include <opencv/cvaux.h>
 #include "./config.h"
 
 using std::cerr;
@@ -82,96 +85,78 @@ Config::Config() {
 }
 
 bool Config::ReadParameters(std::string filename) {
-  libconfig::Config cfg;
+  cv::FileStorage fs;
 
-  // Read config file
   try {
-    cfg.readFile(filename.c_str());
-  } catch(const libconfig::FileIOException &fioex) {
-    cerr << "[ERROR] I/O error while reading file." << endl;
-    return false;
-  } catch(const libconfig::ParseException &pex) {
-    cerr << "[ERROR] Parse error at " << pex.getFile() << ":" << pex.getLine() << " - " << pex.getError() << endl;
+    // Read config file
+    fs.open(filename.c_str(), cv::FileStorage::READ);
+    if (!fs.isOpened()) {
+      cerr << "[ERROR] Failed to open file: " << filename << endl;
+      return false;
+    }
+  } catch(cv::Exception &ex) {
+    cerr << "[ERROR] Parse error: " << ex.what();
     return false;
   }
-
-  const libconfig::Setting& root = cfg.getRoot();
 
   // Camera parameters
-  try {
-    const libconfig::Setting &camsettings = root["camera"];
-    camsettings.lookupValue("width", camera_params_.width);
-    camsettings.lookupValue("height", camera_params_.height);
-    camsettings.lookupValue("fx", camera_params_.fx);
-    camsettings.lookupValue("fy", camera_params_.fy);
-    camsettings.lookupValue("u0", camera_params_.u0);
-    camsettings.lookupValue("v0", camera_params_.v0);
-    camsettings.lookupValue("d1", camera_params_.d1);
-    camsettings.lookupValue("d2", camera_params_.d2);
-    camsettings.lookupValue("d3", camera_params_.d3);
-    camsettings.lookupValue("d4", camera_params_.d4);
-    camsettings.lookupValue("d5", camera_params_.d5);
-  } catch(const libconfig::SettingNotFoundException &nfex) {
-    cerr << "[ERROR] Config error: Camera parameters not found" << endl;
-    return false;
-  }
+  if (fs["Camera.width"].isNamed()) fs["Camera.width"] >> camera_params_.width;
+  if (fs["Camera.height"].isNamed()) fs["Camera.height"] >> camera_params_.height;
+  if (fs["Camera.fx"].isNamed()) fs["Camera.fx"] >> camera_params_.fx;
+  if (fs["Camera.fy"].isNamed()) fs["Camera.fy"] >> camera_params_.fy;
+  if (fs["Camera.u0"].isNamed()) fs["Camera.u0"] >> camera_params_.u0;
+  if (fs["Camera.v0"].isNamed()) fs["Camera.v0"] >> camera_params_.v0;
+  if (fs["Camera.d1"].isNamed()) fs["Camera.d1"] >> camera_params_.d1;
+  if (fs["Camera.d2"].isNamed()) fs["Camera.d2"] >> camera_params_.d2;
+  if (fs["Camera.d3"].isNamed()) fs["Camera.d3"] >> camera_params_.d3;
+  if (fs["Camera.d4"].isNamed()) fs["Camera.d4"] >> camera_params_.d4;
+  if (fs["Camera.d5"].isNamed()) fs["Camera.d5"] >> camera_params_.d5;
 
   // Video parameters
-  try {
-    const libconfig::Setting &videosettings = root["video"];
-    videosettings.lookupValue("type", video_params_.type);
-    if (video_params_.type == 0) {
-      videosettings.lookupValue("device", video_params_.device);
-      videosettings.lookupValue("width", video_params_.width);
-      videosettings.lookupValue("height", video_params_.height);
-      videosettings.lookupValue("fps", video_params_.fps);
-    } else {
-      videosettings.lookupValue("path", video_params_.path);
-      videosettings.lookupValue("filename", video_params_.filename);
-    }
-  } catch(const libconfig::SettingNotFoundException &nfex) {
-    cerr << "[ERROR] Config error: Video parameters not found" << endl;
-    return false;
+  if (fs["Video.type"].isNamed()) fs["Video.type"] >> video_params_.type;
+  if (video_params_.type == 0) {
+    if (fs["Video.device"].isNamed()) fs["Video.device"] >> video_params_.device;
+    if (fs["Video.width"].isNamed()) fs["Video.width"] >> video_params_.width;
+    if (fs["Video.height"].isNamed()) fs["Video.height"] >> video_params_.height;
+    if (fs["Video.fps"].isNamed()) fs["Video.fps"] >> video_params_.fps;
+  } else {
+    if (fs["Video.path"].isNamed()) fs["Video.path"] >> video_params_.path;
+    if (fs["Video.filename"].isNamed()) fs["Video.filename"] >> video_params_.filename;
   }
 
-  // Main parameters
-  try {
-    const libconfig::Setting &mainsettings = root["sdvl"];
-    mainsettings.lookupValue("pyramid_levels", kPyramidLevels_);
-    mainsettings.lookupValue("cell_size", kCellSize_);
-    mainsettings.lookupValue("min_avg_shift", kMinAvgShift_);
-    mainsettings.lookupValue("max_matches", kMaxMatches_);
-    mainsettings.lookupValue("min_matches", kMinMatches_);
-    mainsettings.lookupValue("max_keyframes", kMaxKeyframes_);
-    mainsettings.lookupValue("min_keyframe_its", kMinKeyframeIts_);
-    mainsettings.lookupValue("max_failed", kMaxFailed_);
-    mainsettings.lookupValue("max_search_keyframes", kMaxSearchKeyframes_);
-    mainsettings.lookupValue("max_optim_pose_its", kMaxOptimPoseIts_);
-    mainsettings.lookupValue("max_ransac_points", kMaxRansacPoints_);
-    mainsettings.lookupValue("max_ransac_its", kMaxRansacIts_);
-    mainsettings.lookupValue("threshold_converged", kThresholdConverged_);
-    mainsettings.lookupValue("min_init_corners", kMinInitCorners_);
-    mainsettings.lookupValue("inlier_error_threshold", kInlierErrorThreshold_);
-    mainsettings.lookupValue("map_scale", kMapScale_);
-    mainsettings.lookupValue("max_alignLevel", kMaxAlignLevel_);
-    mainsettings.lookupValue("min_alignLevel", kMinAlignLevel_);
-    mainsettings.lookupValue("max_img_align_its", kMaxImgAlignIts_);
-    mainsettings.lookupValue("align_patch_size", kAlignPatchSize_);
-    mainsettings.lookupValue("scale_min_dist", kScaleMinDist_);
-    mainsettings.lookupValue("lost_ratio", kLostRatio_);
-    mainsettings.lookupValue("patch_size", kPatchSize_);
-    mainsettings.lookupValue("max_align_its", kMaxAlignIts_);
-    mainsettings.lookupValue("search_size", kSearchSize_);
-    mainsettings.lookupValue("use_orb", kUseORB_);
-    mainsettings.lookupValue("orb_size", kORBSize_);
-    mainsettings.lookupValue("max_fast_levels", kMaxFastLevels_);
-    mainsettings.lookupValue("fast_threshold", kFastThreshold_);
-    mainsettings.lookupValue("min_feature_score", kMinFeatureScore_);
+  // SDVL parameters
+  if (fs["SDVL.pyramid_levels"].isNamed()) fs["SDVL.pyramid_levels"] >> kPyramidLevels_;
+  if (fs["SDVL.cell_size"].isNamed()) fs["SDVL.cell_size"] >> kCellSize_;
+  if (fs["SDVL.min_avg_shift"].isNamed()) fs["SDVL.min_avg_shift"] >> kMinAvgShift_;
+  if (fs["SDVL.max_matches"].isNamed()) fs["SDVL.max_matches"] >> kMaxMatches_;
+  if (fs["SDVL.min_matches"].isNamed()) fs["SDVL.min_matches"] >> kMinMatches_;
+  if (fs["SDVL.max_keyframes"].isNamed()) fs["SDVL.max_keyframes"] >> kMaxKeyframes_;
+  if (fs["SDVL.min_keyframe_its"].isNamed()) fs["SDVL.min_keyframe_its"] >> kMinKeyframeIts_;
+  if (fs["SDVL.max_failed"].isNamed()) fs["SDVL.max_failed"] >> kMaxFailed_;
+  if (fs["SDVL.max_search_keyframes"].isNamed()) fs["SDVL.max_search_keyframes"] >> kMaxSearchKeyframes_;
+  if (fs["SDVL.max_optim_pose_its"].isNamed()) fs["SDVL.max_optim_pose_its"] >> kMaxOptimPoseIts_;
+  if (fs["SDVL.max_ransac_points"].isNamed()) fs["SDVL.max_ransac_points"] >> kMaxRansacPoints_;
+  if (fs["SDVL.max_ransac_its"].isNamed()) fs["SDVL.max_ransac_its"] >> kMaxRansacIts_;
+  if (fs["SDVL.threshold_converged"].isNamed()) fs["SDVL.threshold_converged"] >> kThresholdConverged_;
+  if (fs["SDVL.min_init_corners"].isNamed()) fs["SDVL.min_init_corners"] >> kMinInitCorners_;
+  if (fs["SDVL.inlier_error_threshold"].isNamed()) fs["SDVL.inlier_error_threshold"] >> kInlierErrorThreshold_;
+  if (fs["SDVL.map_scale"].isNamed()) fs["SDVL.map_scale"] >> kMapScale_;
+  if (fs["SDVL.max_alignLevel"].isNamed()) fs["SDVL.max_alignLevel"] >> kMaxAlignLevel_;
+  if (fs["SDVL.min_alignLevel"].isNamed()) fs["SDVL.min_alignLevel"] >> kMinAlignLevel_;
+  if (fs["SDVL.max_img_align_its"].isNamed()) fs["SDVL.max_img_align_its"] >> kMaxImgAlignIts_;
+  if (fs["SDVL.align_patch_size"].isNamed()) fs["SDVL.align_patch_size"] >> kAlignPatchSize_;
+  if (fs["SDVL.scale_min_dist"].isNamed()) fs["SDVL.scale_min_dist"] >> kScaleMinDist_;
+  if (fs["SDVL.lost_ratio"].isNamed()) fs["SDVL.lost_ratio"] >> kLostRatio_;
+  if (fs["SDVL.patch_size"].isNamed()) fs["SDVL.patch_size"] >> kPatchSize_;
+  if (fs["SDVL.max_align_its"].isNamed()) fs["SDVL.max_align_its"] >> kMaxAlignIts_;
+  if (fs["SDVL.search_size"].isNamed()) fs["SDVL.search_size"] >> kSearchSize_;
+  if (fs["SDVL.use_orb"].isNamed()) fs["SDVL.use_orb"] >> kUseORB_;
+  if (fs["SDVL.orb_size"].isNamed()) fs["SDVL.orb_size"] >> kORBSize_;
+  if (fs["SDVL.max_fast_levels"].isNamed()) fs["SDVL.max_fast_levels"] >> kMaxFastLevels_;
+  if (fs["SDVL.fast_threshold"].isNamed()) fs["SDVL.fast_threshold"] >> kFastThreshold_;
+  if (fs["SDVL.min_feature_score"].isNamed()) fs["SDVL.min_feature_score"] >> kMinFeatureScore_;
 
-  } catch(const libconfig::SettingNotFoundException &nfex) {
-    cerr << "[ERROR] Config error: SDVL parameters not found" << endl;
-    return false;
-  }
+  fs.release();
 
   return true;
 }
