@@ -25,7 +25,8 @@
 #include <iostream>
 #include <vector>
 #include <queue>
-#include <pthread.h>
+#include <thread>
+#include <mutex>
 #include <memory>
 #include "./frame.h"
 #include "./matcher.h"
@@ -46,13 +47,10 @@ class Map {
   // Start/Stop Map thread
   void Start();
   void Stop();
-  int Run();
+  void Run();
 
-  std::vector<std::shared_ptr<Frame>>& GetKeyframes() { return keyframes_; }
-
-  // Map locks
-  inline void Lock() { pthread_mutex_lock(&mutex_map_); }
-  inline void Unlock() { pthread_mutex_unlock(&mutex_map_); }
+  inline std::vector<std::shared_ptr<Frame>>& GetKeyframes() { return keyframes_; }
+  inline std::mutex& GetMutex() { return mutex_map_; }
 
   // Update map
   void UpdateMap();
@@ -123,9 +121,9 @@ class Map {
   std::shared_ptr<Frame> last_kf_;  // Last Keyframe saved
   int last_matches_;                // Matches found in last iteration
 
-  pthread_t thread_;
+  std::thread* thread_;
   bool running_;
-  pthread_mutex_t mutex_map_;     // Main map mutex
+  std::mutex mutex_map_;     // Main map mutex
 };
 
 }  // namespace sdvl

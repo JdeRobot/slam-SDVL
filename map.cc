@@ -34,11 +34,6 @@ using std::endl;
 
 namespace sdvl {
 
-void* callback_map(void* obj) {
-  static_cast<Map*>(obj)->Run();
-  return (0);
-}
-
 Map::Map(int cell_size) {
   cell_size_ = cell_size;
   n_initializations_ = 0;
@@ -49,8 +44,6 @@ Map::Map(int cell_size) {
   ba_kf_ = nullptr;
   last_kf_ = nullptr;
   last_matches_ = 0;
-
-  pthread_mutex_init(&mutex_map_, NULL);
 }
 
 Map::~Map() {
@@ -59,7 +52,7 @@ Map::~Map() {
 }
 
 void Map::Start() {
-  pthread_create(&thread_, 0, &callback_map, this);
+  thread_ = new std::thread(&Map::Run,this);
 }
 
 void Map::Stop() {
@@ -68,13 +61,12 @@ void Map::Stop() {
   candidates_updating_halt_ = true;
 }
 
-int Map::Run() {
+void Map::Run() {
   running_ = true;
   while (running_) {
     UpdateMap();
     usleep(2 * 1000);
   }
-  return 0;
 }
 
 void Map::UpdateMap() {
@@ -84,31 +76,34 @@ void Map::UpdateMap() {
   if (relocalizing_)
     return;
 
-  Lock();
-  is_empty = frame_queue_.empty();
-  Unlock();
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    is_empty = frame_queue_.empty();
+  }
 
   if (!is_empty) {
     Timer timer(true);
 
-    Lock();
-    if (new_keyframe_set_) {
-      // Search keyframe
-      do {
-        assert(!frame_queue_.empty());
+    // Get next frame
+    {
+      std::unique_lock<std::mutex> lock(mutex_map_);
+      if (new_keyframe_set_) {
+        // Search keyframe
+        do {
+          assert(!frame_queue_.empty());
+          frame = frame_queue_.front();
+          frame_queue_.pop();
+          if (!frame->IsKeyframe())
+            frame_trash_.push_back(frame);
+        } while (!frame->IsKeyframe());
+      } else {
+        // Get last frame
         frame = frame_queue_.front();
         frame_queue_.pop();
-        if (!frame->IsKeyframe())
-          frame_trash_.push_back(frame);
-      } while (!frame->IsKeyframe());
-    } else {
-      // Get last frame
-      frame = frame_queue_.front();
-      frame_queue_.pop();
+      }
+      new_keyframe_set_ = false;
+      candidates_updating_halt_ = false;
     }
-    new_keyframe_set_ = false;
-    candidates_updating_halt_ = false;
-    Unlock();
 
     // Update current candidates
     UpdateCandidates(frame);
@@ -117,9 +112,10 @@ void Map::UpdateMap() {
       InitCandidates(frame);
     } else {
       // Delete frame after update
-      Lock();
-      frame_trash_.push_back(frame);
-      Unlock();
+      {
+        std::unique_lock<std::mutex> lock(mutex_map_);
+        frame_trash_.push_back(frame);
+      }
     }
 
     // Check Bundle adjustment
@@ -138,11 +134,12 @@ void Map::UpdateMap() {
 
 void Map::AddKeyframe(const shared_ptr<Frame> &frame, bool search) {
   if (search) {
-    Lock();
-    new_keyframe_set_ = true;
-    candidates_updating_halt_ = true;
-    frame_queue_.push(frame);
-    Unlock();
+    {
+      std::unique_lock<std::mutex> lock(mutex_map_);
+      new_keyframe_set_ = true;
+      candidates_updating_halt_ = true;
+      frame_queue_.push(frame);
+    }
   }
   keyframes_.push_back(frame);
   last_kf_ = frame;
@@ -150,15 +147,13 @@ void Map::AddKeyframe(const shared_ptr<Frame> &frame, bool search) {
 }
 
 void Map::AddFrame(const shared_ptr<Frame> &frame) {
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_map_);
   frame_queue_.push(frame);
-  Unlock();
 }
 
 void Map::DeletePoint(const std::shared_ptr<Point> &point) {
-  Lock();
+  std::unique_lock<std::mutex> lock(mutex_map_);
   points_trash_.push_back(point);
-  Unlock();
 }
 
 bool Map::NeedKeyframe(const shared_ptr<Frame> &frame, int matches) {
@@ -189,9 +184,10 @@ void Map::LimitKeyframes(const shared_ptr<Frame> &frame) {
 
   // Get furthest keyframe
   shared_ptr<Frame> kf = GetFurthestKeyframe(frame);
-  Lock();
-  frame_trash_.push_back(kf);
-  Unlock();
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    frame_trash_.push_back(kf);
+  }
 
   cout << "[DEBUG] Furthest keyframe send to trash" << endl;
 }
@@ -201,18 +197,19 @@ void Map::EmptyTrash() {
   vector<shared_ptr<Point>> points_trash_cp;
 
   // Copy frames and points that are going to be deleted
-  Lock();
-  for (auto it=frame_trash_.begin(); it != frame_trash_.end(); it++) {
-    frame_trash_cp.push_back(*it);
-    *it = nullptr;
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    for (auto it=frame_trash_.begin(); it != frame_trash_.end(); it++) {
+      frame_trash_cp.push_back(*it);
+      *it = nullptr;
+    }
+    frame_trash_.clear();
+    for (auto it=points_trash_.begin(); it != points_trash_.end(); it++) {
+      points_trash_cp.push_back(*it);
+      *it = nullptr;
+    }
+    points_trash_.clear();
   }
-  frame_trash_.clear();
-  for (auto it=points_trash_.begin(); it != points_trash_.end(); it++) {
-    points_trash_cp.push_back(*it);
-    *it = nullptr;
-  }
-  points_trash_.clear();
-  Unlock();
 
   // Delete frames
   for (auto fit=frame_trash_cp.begin(); fit != frame_trash_cp.end(); fit++) {
@@ -278,9 +275,10 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
   if (Config::UseORB())
     assert(descriptors.size() == fcorners.size());
 
-  Lock();
-  candidates_updating_halt_ = true;
-  Unlock();
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    candidates_updating_halt_ = true;
+  }
   n_initializations_++;
 
   depth_mean = frame->GetSceneDepth();
@@ -327,18 +325,18 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
       if (depth < Config::MapScale()*Config::ScaleMinDist() || depth < depth_mean*Config::ScaleMinDist())
         continue;
 
-      Lock();
-      // Link to first frame
-      candidate->InitCandidate(feature, depth);
-      frame->AddFeature(feature);
-      candidate->AddFeature(feature);
-      feature->SetPoint(candidate);
+      // Links to first and closest frame
+      {
+        std::unique_lock<std::mutex> lock(mutex_map_);
+        candidate->InitCandidate(feature, depth);
+        frame->AddFeature(feature);
+        candidate->AddFeature(feature);
+        feature->SetPoint(candidate);
 
-      // Link to closest keyframe
-      cframe->AddFeature(feature2);
-      candidate->AddFeature(feature2);
-      feature2->SetPoint(candidate);
-      Unlock();
+        cframe->AddFeature(feature2);
+        candidate->AddFeature(feature2);
+        feature2->SetPoint(candidate);
+      }
 
       imatches[index] = true;
       candidates_.push_back(candidate);
@@ -354,9 +352,10 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
     }
   }
 
-  Lock();
-  candidates_updating_halt_ = false;
-  Unlock();
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    candidates_updating_halt_ = false;
+  }
 }
 
 void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
@@ -374,9 +373,10 @@ void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
   // Update candidates
   vector<shared_ptr<Point>>::iterator it = candidates_.begin()+index;
   while (it != candidates_.end()) {
-    Lock();
-    halt = candidates_updating_halt_;
-    Unlock();
+    {
+      std::unique_lock<std::mutex> lock(mutex_map_);
+      halt = candidates_updating_halt_;
+    }
 
     // Updating halted
     if (halt)
@@ -387,9 +387,10 @@ void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
 
     // Check if we have to delete it
     if (point->ToDelete()) {
-      Lock();
-      points_trash_.push_back(point);
-      Unlock();
+      {
+        std::unique_lock<std::mutex> lock(mutex_map_);
+        points_trash_.push_back(point);
+      }
       it = candidates_.erase(it);
       continue;
     }
@@ -459,24 +460,25 @@ void Map::CheckConnections(const shared_ptr<Frame> &frame) {
   int min_connections, best_n;
   bool saved;
 
-  Lock();
   // Count how many points are seen from each keyframe
-  vector<shared_ptr<Feature>>& features = frame->GetFeatures();
-  for (auto it=features.begin(); it != features.end(); it++) {
-    assert(*it != nullptr);
-    shared_ptr<Point> point = (*it)->GetPoint();
-    if (!point || point->ToDelete())
-      continue;
-
-    std::list<shared_ptr<Feature>>& ffeatures = point->GetFeatures();
-    for (auto fit=ffeatures.begin(); fit != ffeatures.end(); fit++) {
-      assert(*fit != nullptr);
-      if ((*fit)->GetFrame()->GetID() == frame->GetID())
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    vector<shared_ptr<Feature>>& features = frame->GetFeatures();
+    for (auto it=features.begin(); it != features.end(); it++) {
+      assert(*it != nullptr);
+      shared_ptr<Point> point = (*it)->GetPoint();
+      if (!point || point->ToDelete())
         continue;
-      kfs[(*fit)->GetFrame()]++;
+
+      std::list<shared_ptr<Feature>>& ffeatures = point->GetFeatures();
+      for (auto fit=ffeatures.begin(); fit != ffeatures.end(); fit++) {
+        assert(*fit != nullptr);
+        if ((*fit)->GetFrame()->GetID() == frame->GetID())
+          continue;
+        kfs[(*fit)->GetFrame()]++;
+      }
     }
   }
-  Unlock();
 
   if (kfs.empty()) {
     return;
@@ -486,28 +488,29 @@ void Map::CheckConnections(const shared_ptr<Frame> &frame) {
   saved = false;
   min_connections = Config::MinMatches()/2;
 
-  Lock();
   // Rule out connections under threshold
-  for (auto it=kfs.begin(); it != kfs.end(); it++) {
-    if (it->second > best_n) {
-      best_n = it->second;
-      best_kf = it->first;
+  {
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    for (auto it=kfs.begin(); it != kfs.end(); it++) {
+      if (it->second > best_n) {
+        best_n = it->second;
+        best_kf = it->first;
+      }
+
+      // Connect to each other
+      if (it->second >= min_connections) {
+        frame->AddConnection(std::make_pair(it->first, it->second));
+        it->first->AddConnection(std::make_pair(frame, it->second));
+        saved = true;
+      }
     }
 
-    // Connect to each other
-    if (it->second >= min_connections) {
-      frame->AddConnection(std::make_pair(it->first, it->second));
-      it->first->AddConnection(std::make_pair(frame, it->second));
-      saved = true;
+    // At least add one
+    if (!saved && best_n > 0) {
+      frame->AddConnection(std::make_pair(best_kf, best_n));
+      best_kf->AddConnection(std::make_pair(frame, best_n));
     }
   }
-
-  // At least add one
-  if (!saved && best_n > 0) {
-    frame->AddConnection(std::make_pair(best_kf, best_n));
-    best_kf->AddConnection(std::make_pair(frame, best_n));
-  }
-  Unlock();
 }
 
 shared_ptr<Frame> Map::GetFurthestKeyframe(const shared_ptr<Frame> &frame) {

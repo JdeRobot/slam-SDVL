@@ -33,9 +33,6 @@ UI::UI(Camera* camera, SDVL * handler, bool show) {
   handler_ = handler;
   visible_ = true;
 
-  pthread_mutex_init(&mutex_display_, NULL);
-  pthread_mutex_init(&mutex_handler_, NULL);
-
   // Create elements
   drawscene_ = new DrawScene(camera_);
   drawimage_ = new DrawImage(camera_);
@@ -45,9 +42,8 @@ UI::~UI() {
 }
 
 void UI::SetHandler(SDVL * handler) {
-  pthread_mutex_lock(&mutex_handler_);
+  std::unique_lock<std::mutex> lock(mutex_handler_);
   handler_ = handler;
-  pthread_mutex_unlock(&mutex_handler_);
 }
 
 void UI::Update(const cv::Mat &image) {
@@ -58,30 +54,34 @@ void UI::Update(const cv::Mat &image) {
   SDVL::TrackingQuality quality;
 
   // Save image
-  pthread_mutex_lock(&mutex_display_);
-  drawimage_->SetBackground(image);
-  pthread_mutex_unlock(&mutex_display_);
+  {
+    std::unique_lock<std::mutex> lock(mutex_display_);
+    drawimage_->SetBackground(image);
+  }
 
-  if (handler_ == nullptr)
-    return;
+  // Get data from handler
+  {
+    std::unique_lock<std::mutex> lock(mutex_handler_);
+    if (handler_ == nullptr)
+      return;
 
-  pthread_mutex_lock(&mutex_handler_);
-  handler_->GetCameraTrail(&camera_trail);
-  handler_->GetPoints(&points);
-  handler_->GetLastFeatures(&features);
-  pose = handler_->GetPose();
-  quality = handler_->GetTrackingQuality();
-  pthread_mutex_unlock(&mutex_handler_);
+    handler_->GetCameraTrail(&camera_trail);
+    handler_->GetPoints(&points);
+    handler_->GetLastFeatures(&features);
+    pose = handler_->GetPose();
+    quality = handler_->GetTrackingQuality();
+  }
 
   // Save parameters
-  pthread_mutex_lock(&mutex_display_);
-  drawscene_->SetCameraTrail(camera_trail);
-  drawscene_->SetPoints(points);
-  drawscene_->SetCurrentPose(pose);
-  drawimage_->SetFeatures(features);
-  drawimage_->SetCurrentPose(pose.Inverse());
-  drawimage_->SetTrackingQuality(quality);
-  pthread_mutex_unlock(&mutex_display_);
+  {
+    std::unique_lock<std::mutex> lock(mutex_display_);
+    drawscene_->SetCameraTrail(camera_trail);
+    drawscene_->SetPoints(points);
+    drawscene_->SetCurrentPose(pose);
+    drawimage_->SetFeatures(features);
+    drawimage_->SetCurrentPose(pose.Inverse());
+    drawimage_->SetTrackingQuality(quality);
+  }
 }
 
 bool UI::IsVisible() {
@@ -90,10 +90,9 @@ bool UI::IsVisible() {
 
 void UI::Display() {
   // Update
-  pthread_mutex_lock(&mutex_display_);
+  std::unique_lock<std::mutex> lock(mutex_display_);
   drawscene_->ShowScene();
   drawimage_->ShowImage();
-  pthread_mutex_unlock(&mutex_display_);
 }
 
 }  // namespace sdvl

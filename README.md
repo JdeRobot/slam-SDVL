@@ -43,7 +43,7 @@ Computer vision library employed to manipulate images.
 sudo apt-get install libopencv-dev
 ```
 
-### 2.6 Pangolin
+### 2.4 Pangolin
 ---
 
 Library for managing OpenGL display, employed for visualization and user interface.
@@ -66,7 +66,7 @@ cmake --build .
 sudo make install
 ```
 
-### 2.7 G2o
+### 2.5 G2o
 
 C++ framework for optimizing graph-based nonlinear error functions. It has been used to optimize map with Bundle Adjustment.
 

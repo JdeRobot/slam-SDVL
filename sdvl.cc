@@ -180,11 +180,12 @@ bool SDVL::ProcessFrame(const shared_ptr<Frame> &last_frame, const shared_ptr<Fr
 
   cout << "[DEBUG] Process standard frame" << endl;
 
-  // Align image frames
   ImageAlign image_align;
-  map_.Lock();
-  image_align.ComputePose(last_frame, current_frame_);
-  map_.Unlock();
+  // Align image frames
+  {
+    std::unique_lock<std::mutex> lock(map_.GetMutex());
+    image_align.ComputePose(last_frame, current_frame_);
+  }
 
   // Align points with new frame
   feature_align_.Reproject(current_frame_, last_frame, last_kf);
@@ -207,11 +208,12 @@ bool SDVL::Relocalize(shared_ptr<Frame> *last_kf) {
     shared_ptr<Frame> cframe = *it;
     current_frame_->SetPose(cframe->GetPose());
 
-    // Align image
     ImageAlign image_align;
-    map_.Lock();
-    image_align.ComputePose(cframe, current_frame_, true);
-    map_.Unlock();
+    // Align image
+    {
+      std::unique_lock<std::mutex> lock(map_.GetMutex());
+      image_align.ComputePose(cframe, current_frame_, true);
+    }
 
     // Max error
     if (image_align.GetError() >= 0.001)
@@ -277,12 +279,11 @@ void SDVL::SetMotionModel() {
 }
 
 void SDVL::GetCameraTrail(vector<std::pair<sdvl::SE3, bool>> * positions) {
+  std::unique_lock<std::mutex> lock(map_.GetMutex());
   positions->clear();
-  map_.Lock();
   for (auto it=map_.GetKeyframes().begin(); it != map_.GetKeyframes().end(); it++) {
     positions->push_back(std::make_pair((*it)->GetWorldPose(), (*it)->IsSelected()));
   }
-  map_.Unlock();
 }
 
 void SDVL::GetPoints(vector<Eigen::Vector3d> * positions) {
@@ -290,9 +291,9 @@ void SDVL::GetPoints(vector<Eigen::Vector3d> * positions) {
   Eigen::Vector3d v;
   SE3 pose;
 
-  positions->clear();
+  std::unique_lock<std::mutex> lock(map_.GetMutex());
 
-  map_.Lock();
+  positions->clear();
   for (auto it=map_.GetKeyframes().begin(); it != map_.GetKeyframes().end(); it++) {
     for (auto feature=(*it)->GetFeatures().begin(); feature != (*it)->GetFeatures().end(); feature++) {
       assert(*feature != nullptr);
@@ -315,15 +316,14 @@ void SDVL::GetPoints(vector<Eigen::Vector3d> * positions) {
       }
     }
   }
-  map_.Unlock();
 }
 
 void SDVL::GetLastFeatures(vector<Eigen::Vector3i> * positions) {
   Eigen::Vector2d pos;
 
-  positions->clear();
+  std::unique_lock<std::mutex> lock(map_.GetMutex());
 
-  map_.Lock();
+  positions->clear();
 
   if (last_frame_) {
     vector<shared_ptr<Feature>>& features = last_frame_->GetFeatures();
@@ -340,7 +340,6 @@ void SDVL::GetLastFeatures(vector<Eigen::Vector3i> * positions) {
       positions->push_back(Eigen::Vector3i((*outlier)(0), (*outlier)(1), Point::P_OUTLIER));
     }
   }
-  map_.Unlock();
 }
 
 sdvl::SE3 SDVL::GetPose() const {

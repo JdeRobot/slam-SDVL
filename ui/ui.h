@@ -24,6 +24,7 @@
 
 #include <string>
 #include <iostream>
+#include <mutex>
 #include "../camera.h"
 #include "../sdvl.h"
 #include "./drawscene.h"
@@ -54,8 +55,8 @@ class UI {
   SDVL * handler_;
   bool visible_;
 
-  pthread_mutex_t mutex_display_;
-  pthread_mutex_t mutex_handler_;
+  std::mutex mutex_display_;
+  std::mutex mutex_handler_;
 };
 
 }  // namespace sdvl

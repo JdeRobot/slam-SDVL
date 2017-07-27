@@ -4,7 +4,7 @@ SET(USE_GUI TRUE)
 
 include (FindPkgConfig)
 if (PKG_CONFIG_FOUND)
-  FIND_PACKAGE(Threads)
+  FIND_PACKAGE(Threads REQUIRED)
   FIND_PACKAGE(OpenCV REQUIRED)
   pkg_check_modules(Eigen REQUIRED eigen3)
   if(USE_GUI)
@@ -53,11 +53,11 @@ endif()
 
 # Set link libraries
 LIST(APPEND LINK_LIBS 
+  ${CMAKE_THREAD_LIBS_INIT}
   ${OpenCV_LIBRARIES}
   ${Eigen_LIBRARIES}
   ${Pangolin_LIBRARIES}
   ${PROJECT_SOURCE_DIR}/extra/g2o/lib/libg2o.so
-  ${CMAKE_THREAD_LIBS_INIT}
 )
 
 ADD_EXECUTABLE(SDVL ${SOURCEFILES})

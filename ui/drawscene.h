@@ -26,7 +26,7 @@
 #include <iostream>
 #include <utility>
 #include <vector>
-#include <pthread.h>
+#include <mutex>
 #include <pangolin/pangolin.h>
 #include "../camera.h"
 #include "../extra/se3.h"
@@ -43,9 +43,6 @@ class DrawScene {
   void SetPoints(const std::vector<Eigen::Vector3d> &points);
   inline void SetCurrentPose(const sdvl::SE3 &pose) { pose_ = pose; }
 
-  inline void Lock() { pthread_mutex_lock(&mutex_3D); }
-  inline void UnLock() { pthread_mutex_unlock(&mutex_3D); }
-
   void ShowScene();
 
  protected:
@@ -57,7 +54,7 @@ class DrawScene {
   void DrawCamera(const SE3 &se3, bool slim, bool colored);
   void DrawPoint(const Eigen::Vector3d &pos);
 
-  pthread_mutex_t mutex_3D;
+  std::mutex mutex_3D_;
 
   Camera * camera_;
   std::vector<std::pair<sdvl::SE3, bool>> camera_trail_;    // Camera poses

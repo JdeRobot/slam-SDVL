@@ -20,7 +20,7 @@
  */
 
 #include <iostream>
-#include <pthread.h>
+#include <thread>
 #include "./sdvl.h"
 #include "./camera.h"
 #include "./video_source.h"
@@ -35,15 +35,13 @@ using std::cerr;
 using std::endl;
 
 #ifdef USE_GUI
-void* callback_ui(void* obj);
-
 class UIThread {
  public:
   UIThread() {
     running_ = false;
   }
 
-  int main() {
+  void Run() {
     // Create user interface
     ui_ = new sdvl::UI(camera_, handler_, true);
     running_ = true;
@@ -55,17 +53,15 @@ class UIThread {
 
       usleep(100 * 1000);
     }
-
-    return 0;
   }
 
-  void start(sdvl::Camera * camera, sdvl::SDVL * handler) {
+  void Start(sdvl::Camera * camera, sdvl::SDVL * handler) {
     camera_ = camera;
     handler_ = handler;
-    pthread_create(&thread_, 0, &callback_ui, this);
+    thread_ = new std::thread(&UIThread::Run,this);
   }
 
-  void stop() {
+  void Stop() {
     running_ = false;
   }
 
@@ -85,14 +81,9 @@ class UIThread {
   sdvl::Camera * camera_;
   sdvl::SDVL * handler_;
 
-  pthread_t thread_;
+  std::thread* thread_;
   bool running_;
 };
-
-void* callback_ui(void* obj) {
-  static_cast<UIThread*>(obj)->main();
-  return (0);
-}
 #endif
 
 int main(int argc, char** argv) {
@@ -120,7 +111,7 @@ int main(int argc, char** argv) {
 
   #ifdef USE_GUI
   // Start UI
-  ui.start(camera, nullptr);
+  ui.Start(camera, nullptr);
   usleep(1000 * 1000);
   #endif
 
@@ -173,7 +164,7 @@ int main(int argc, char** argv) {
   if (handler != nullptr && !sequential)
     handler->Stop();
   #ifdef USE_GUI
-  ui.stop();
+  ui.Stop();
   #endif
 
   return 0;
