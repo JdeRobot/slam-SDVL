@@ -64,7 +64,6 @@ class Frame {
 
   inline std::vector<std::vector<std::vector<uchar>>>& GetDescriptors() { return descriptors_; }
   inline std::vector<std::vector<uchar>>& GetFilteredDescriptors() { return filtered_descriptors_; }
-  inline std::vector<std::pair<std::shared_ptr<Frame>, int>>& GetConnections() { return connections_; }
 
   inline Camera * GetCamera() const { return camera_; }
   inline int GetWidth() const { return width_; }
@@ -76,6 +75,9 @@ class Frame {
 
   inline int GetLastBA() const { return last_ba_; }
   inline void SetLastBA(int id) { last_ba_ = id; }
+
+  inline bool ToDelete() const { return delete_; }
+  inline void SetDelete() { delete_ = true; }
 
   // Return pose in world coordinate
   inline SE3 GetWorldPose() const { return pose_.Inverse(); }
@@ -152,6 +154,7 @@ class Frame {
   int width_;                       // Image width in first pyramid level
   int height_;                      // Image width in first pyramid level
   SE3 pose_;                        // Frame to world pose
+  bool delete_;                     // True if it will be deleted
 
   std::vector<std::shared_ptr<Feature>> features_;      // Features detected in this frame
   std::vector<std::vector<Eigen::Vector2i>> corners_;   // Corners detected in each pyramid level

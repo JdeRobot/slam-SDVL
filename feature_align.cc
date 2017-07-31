@@ -321,11 +321,11 @@ void FeatureAlign::ProjectPoints(const shared_ptr<Frame> &frame, const shared_pt
     vector<shared_ptr<Feature>>& features = (*it)->GetFeatures();
 
     // Project points and calculate their corresponding grid cells
-    for (auto it_pts=features.begin(); it_pts != features.end(); it_pts++) {
-      if (*it_pts == nullptr)
+    for (auto it_fts=features.begin(); it_fts != features.end(); it_fts++) {
+      if (*it_fts == nullptr)
         continue;
 
-      shared_ptr<Point> point = (*it_pts)->GetPoint();
+      shared_ptr<Point> point = (*it_fts)->GetPoint();
       if (!point || point->ToDelete())
         continue;
 

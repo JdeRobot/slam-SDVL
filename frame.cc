@@ -42,6 +42,7 @@ Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img) {
   is_keyframe_ = false;
   selected_ = false;
   last_ba_ = -1;
+  delete_ = false;
 
   // Create Image Pyramid
   CreatePyramid(img);
@@ -208,14 +209,18 @@ void Frame::GetBestConnections(vector<shared_ptr<Frame>>* connections, int n) {
 
   if (n == 0 || n >= static_cast<int>(connections_.size())) {
     // Copy all
-    for (auto it=connections_.begin(); it != connections_.end(); it++)
-      connections->push_back(it->first);
+    for (auto it=connections_.begin(); it != connections_.end(); it++) {
+      if (!it->first->ToDelete())
+        connections->push_back(it->first);
+    }
   } else {
     // Sort by num points shared
     sort(connections_.begin(), connections_.end(), SharedPointsComparator());
     for (auto it=connections_.begin(); it != connections_.end() && count < n; it++) {
-      connections->push_back(it->first);
-      count++;
+      if (!it->first->ToDelete()) {
+        connections->push_back(it->first);
+        count++;
+      }
     }
   }
 }

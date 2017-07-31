@@ -167,6 +167,14 @@ bool Point::HasConverged() {
   return false;
 }
 
+bool Point::SeenFrom(const std::shared_ptr<Frame> &frame) const {
+  for (auto it=features_.begin(); it != features_.end(); it++) {
+    if (frame->GetID() == (*it)->GetFrame()->GetID())
+      return true;
+  }
+  return false;
+}
+
 double Point::ComputeTau(const SE3 &pose, const Eigen::Vector3d &v, double depth, double px_error_angle) {
   const double PI = 3.14159265;
   Eigen::Vector3d t(pose.GetTranslation());

@@ -44,6 +44,7 @@ Map::Map(int cell_size) {
   ba_kf_ = nullptr;
   last_kf_ = nullptr;
   last_matches_ = 0;
+  initial_kf_id_ = 0;
 }
 
 Map::~Map() {
@@ -52,7 +53,7 @@ Map::~Map() {
 }
 
 void Map::Start() {
-  thread_ = new std::thread(&Map::Run,this);
+  thread_ = new std::thread(&Map::Run, this);
 }
 
 void Map::Stop() {
@@ -109,8 +110,12 @@ void Map::UpdateMap() {
     UpdateCandidates(frame);
     if (frame->IsKeyframe()) {
       CheckConnections(frame);
+      //AddConnectionsPoints(frame);
       InitCandidates(frame);
     } else {
+      // Check redundant keyframes
+      //CheckRedundantKeyframes();
+
       // Delete frame after update
       {
         std::unique_lock<std::mutex> lock(mutex_map_);
@@ -129,17 +134,18 @@ void Map::UpdateMap() {
 
     timer.Stop();
     cout << "[INFO] Map time is " << timer.GetMsTime() << "ms" << endl;
+    cout << "[DEBUG] Map size is " << keyframes_.size() << endl;
   }
 }
 
 void Map::AddKeyframe(const shared_ptr<Frame> &frame, bool search) {
   if (search) {
-    {
-      std::unique_lock<std::mutex> lock(mutex_map_);
-      new_keyframe_set_ = true;
-      candidates_updating_halt_ = true;
-      frame_queue_.push(frame);
-    }
+    std::unique_lock<std::mutex> lock(mutex_map_);
+    new_keyframe_set_ = true;
+    candidates_updating_halt_ = true;
+    frame_queue_.push(frame);
+  } else {
+    initial_kf_id_ = std::max(initial_kf_id_, frame->GetID());
   }
   keyframes_.push_back(frame);
   last_kf_ = frame;
@@ -186,6 +192,7 @@ void Map::LimitKeyframes(const shared_ptr<Frame> &frame) {
   shared_ptr<Frame> kf = GetFurthestKeyframe(frame);
   {
     std::unique_lock<std::mutex> lock(mutex_map_);
+    kf->SetDelete();
     frame_trash_.push_back(kf);
   }
 
@@ -216,7 +223,6 @@ void Map::EmptyTrash() {
     if ((*fit)->IsKeyframe()) {
       for (auto it=keyframes_.begin(); it != keyframes_.end(); it++) {
         if (*it == *fit) {
-          (*it)->RemoveFeatures();
           keyframes_.erase(it);
           cout << "[DEBUG] Keyframe removed" << endl;
           break;
@@ -224,6 +230,7 @@ void Map::EmptyTrash() {
       }
     }
     (*fit)->RemoveFeatures();
+    (*fit)->SetDelete();
     *fit = nullptr;
   }
   frame_trash_cp.clear();
@@ -291,7 +298,7 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
     if (distance/depth_mean < 0.01)
       continue;
 
-    // try to initialize a candidate for every corner
+    // Try to initialize a candidate for every corner
     index = 0;
     for (auto it=fcorners.begin(); it != fcorners.end(); it++, index++) {
       if (imatches[index])
@@ -307,6 +314,30 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
 
       // Search corner in closest keyframe
       if (!matcher.SearchPoint(cframe, feature, 1.0/depth_mean, 1.0, &imgpos, &level))
+        continue;
+
+      // Compare to 3D points seen from selected frame
+      bool mfound = false;
+      vector<shared_ptr<Feature>>& features = cframe->GetFeatures();
+      for (auto it_fts=features.begin(); it_fts != features.end() && !mfound; it_fts++) {
+        if (*it_fts == nullptr)
+          continue;
+
+        shared_ptr<Point> point = (*it_fts)->GetPoint();
+        if (!point || point->ToDelete())
+          continue;
+
+        // Close feature
+        if(Distance2D(imgpos, (*it_fts)->GetPosition()) < 1.0) {
+          // Link feature and point
+          std::unique_lock<std::mutex> lock(mutex_map_);
+          feature->SetPoint(point);
+          frame->AddFeature(feature);
+          point->AddFeature(feature);
+          mfound = true;
+        }
+      }
+      if (mfound)
         continue;
 
       // Get depth from triangulation
@@ -473,6 +504,8 @@ void Map::CheckConnections(const shared_ptr<Frame> &frame) {
       std::list<shared_ptr<Feature>>& ffeatures = point->GetFeatures();
       for (auto fit=ffeatures.begin(); fit != ffeatures.end(); fit++) {
         assert(*fit != nullptr);
+        if ((*fit)->GetFrame()->ToDelete())
+          continue;
         if ((*fit)->GetFrame()->GetID() == frame->GetID())
           continue;
         kfs[(*fit)->GetFrame()]++;
@@ -480,9 +513,8 @@ void Map::CheckConnections(const shared_ptr<Frame> &frame) {
     }
   }
 
-  if (kfs.empty()) {
+  if (kfs.empty())
     return;
-  }
 
   best_n = 0;
   saved = false;
@@ -509,6 +541,132 @@ void Map::CheckConnections(const shared_ptr<Frame> &frame) {
     if (!saved && best_n > 0) {
       frame->AddConnection(std::make_pair(best_kf, best_n));
       best_kf->AddConnection(std::make_pair(frame, best_n));
+    }
+  }
+}
+
+void Map::AddConnectionsPoints(const std::shared_ptr<Frame> &frame) {
+  int level;
+  Eigen::Vector2d pos;
+  bool found;
+
+  // Get connected keyframes
+  vector<shared_ptr<Frame>> best_kfs;
+  frame->GetBestConnections(&best_kfs, Config::MaxSearchKeyframes());
+  if (best_kfs.empty())
+    return;
+
+  // Select points not seen yet
+  std::set<shared_ptr<Point>> points;
+  for (auto it_kf=best_kfs.begin(); it_kf != best_kfs.end(); it_kf++) {
+
+    // Get 3D points seen from this keyframe
+    vector<shared_ptr<Feature>>& features = (*it_kf)->GetFeatures();
+    for (auto it_fts=features.begin(); it_fts != features.end(); it_fts++) {
+      if (*it_fts == nullptr)
+        continue;
+
+      shared_ptr<Point> point = (*it_fts)->GetPoint();
+      if (!point || point->ToDelete())
+        continue;
+
+      // Check if point is already detected in current frame
+      if (point->SeenFrom(frame))
+        continue;
+
+      points.insert(point);
+    }
+  }
+
+  Matcher matcher(Config::PatchSize());
+
+  // Search points in current frame
+  for (auto it_pts=points.begin(); it_pts != points.end(); it_pts++) {
+    shared_ptr<Feature> feature = (*it_pts)->GetInitFeature();
+    if (!feature)
+      continue;
+
+    // Project in current frame
+    if (!frame->Project((*it_pts)->GetPosition(), &pos))
+      continue;
+
+    if (!frame->GetCamera()->IsInsideImage(pos.cast<int>(), Config::PatchSize()))
+      continue;
+
+    found = matcher.SearchPoint(frame, feature, (*it_pts)->GetInverseDepth(), (*it_pts)->GetStd(), &pos, &level);
+    if (found) {
+      // Link feature and point
+      std::unique_lock<std::mutex> lock(mutex_map_);
+      shared_ptr<Feature> feature = std::make_shared<Feature>(frame, pos, level);
+      feature->SetPoint(*it_pts);
+      frame->AddFeature(feature);
+      (*it_pts)->AddFeature(feature);
+    }
+  }
+}
+
+void Map::CheckRedundantKeyframes() {
+  int min_features = 3;
+  int npoints, nmatches, nredundant;
+  int size, level1, level2;
+
+  vector<shared_ptr<Frame>> fov_kfs_;
+
+  // Check only local keyframes
+  last_kf_->GetBestConnections(&fov_kfs_, 0);
+  for (auto it=fov_kfs_.begin(); it != fov_kfs_.end(); it++) {
+    shared_ptr<Frame> kf = *it;
+
+    // Skip initial keyframes
+    if (kf->ToDelete() || kf->GetID() <= initial_kf_id_)
+      continue;
+
+    nredundant = 0;
+    npoints = 0;
+
+    // Get 3D points seen from this keyframe
+    vector<shared_ptr<Feature>>& features = kf->GetFeatures();
+    for (auto it_fts=features.begin(); it_fts != features.end(); it_fts++) {
+      if (*it_fts == nullptr)
+        continue;
+
+      shared_ptr<Point> point = (*it_fts)->GetPoint();
+      if (!point || point->ToDelete())
+        continue;
+
+      npoints++;
+      level1 = (*it_fts)->GetLevel();
+
+      // Check how many keyframes have seen the same point
+      std::list<shared_ptr<Feature>>& ffeatures = point->GetFeatures();
+      size = ffeatures.size();
+      if (size > min_features) {
+        nmatches = 0;
+        for (auto fit=ffeatures.begin(); fit != ffeatures.end(); fit++) {
+          shared_ptr<Frame> fkf = (*fit)->GetFrame();
+
+          if (fkf->ToDelete() || fkf->GetID() == kf->GetID())
+            continue;
+
+            // Only valid if point was seen at the same scale level or closer
+            level2 = (*fit)->GetLevel();
+            if (level2 <= level1+1) {
+              nmatches++;
+              if (nmatches >= min_features)
+                break;
+            }
+        }
+        // Point seen from at least 3 keyframes
+        if (nmatches >= min_features) {
+          nredundant++;
+        }
+      }
+    }
+
+    if (nredundant > 0.8*npoints) {
+      std::unique_lock<std::mutex> lock(mutex_map_);
+      kf->SetDelete();
+      frame_trash_.push_back(kf);
     }
   }
 }
@@ -678,8 +836,10 @@ void Map::BundleAdjustment() {
     fov_kfs_.push_back(ba_kf_);
   } else {
     // Save all
-    for (auto it=keyframes_.begin(); it != keyframes_.end(); it++)
-      fov_kfs_.push_back(*it);
+    for (auto it=keyframes_.begin(); it != keyframes_.end(); it++) {
+      if ((*it)->ToDelete())
+        fov_kfs_.push_back(*it);
+    }
   }
 
   if (fov_kfs_.size() <= 1)

@@ -100,6 +100,12 @@ class Map {
   // Check connections between a new keyframe and old keyframes
   void CheckConnections(const std::shared_ptr<Frame> &frame);
 
+  // Add more points from connected keyframes
+  void AddConnectionsPoints(const std::shared_ptr<Frame> &frame);
+
+  // Check redundant keyframes and remove them
+  void CheckRedundantKeyframes();
+
   // Return keyframe furthest apart from input frame
   std::shared_ptr<Frame> GetFurthestKeyframe(const std::shared_ptr<Frame> &frame);
 
@@ -120,6 +126,7 @@ class Map {
   std::shared_ptr<Frame> ba_kf_;    // Keyframe to do bundle adjuntment
   std::shared_ptr<Frame> last_kf_;  // Last Keyframe saved
   int last_matches_;                // Matches found in last iteration
+  int initial_kf_id_;               // Id for initial keyframe
 
   std::thread* thread_;
   bool running_;

@@ -87,6 +87,11 @@ class Point {
     features_.push_front(feature);
   }
 
+  // Get feature in last Keyframe
+  inline std::shared_ptr<Feature> GetLastFeature() {
+    return features_.front();
+  }
+
   // Init candidate with feature
   void InitCandidate(const std::shared_ptr<Feature> &p, double depth);
 
@@ -100,6 +105,9 @@ class Point {
   // Return true if point has converged
   bool HasConverged();
 
+  // Check if point is seen from a Keyframe
+  bool SeenFrom(const std::shared_ptr<Frame> &frame) const;
+
   // Delete feature from list
   void DeleteFeature(const std::shared_ptr<Feature> &feature);
 
@@ -112,7 +120,7 @@ class Point {
 
   int id_;                      // Point unique id
   PointStatus status_;          // Point status in last frame
-  bool delete_;                 // True if will be deleted
+  bool delete_;                 // True if it will be deleted
 
   std::list<std::shared_ptr<Feature>> features_;     // Store all matches of this point
 
