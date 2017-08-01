@@ -145,8 +145,16 @@ void Point::SetPosition(const Eigen::Vector3d &pos) {
   if (fixed_) {
     p3d_ = pos;
   } else {
-    // Get inverse depth
-    double depth = feature_->GetFrame()->DistanceTo(pos);
+    std::shared_ptr<Frame> frame = feature_->GetFrame();
+
+    // Update 3d vector
+    Eigen::Vector2d p2d;
+    frame->Project(pos, &p2d);
+    Eigen::Vector3d v3d = frame->GetCamera()->Unproject(p2d);
+    feature_->SetVector(v3d);
+
+    // Update inverse depth
+    double depth = frame->DistanceTo(pos);
     rho_ = 1.0/depth;
   }
 }

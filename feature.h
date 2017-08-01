@@ -67,6 +67,10 @@ class Feature {
     return v_;
   }
 
+  inline const void SetVector(Eigen::Vector3d &v) {
+    v_ = v;
+  }
+
   inline int GetLevel() const {
     return level_;
   }

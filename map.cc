@@ -45,6 +45,7 @@ Map::Map(int cell_size) {
   last_kf_ = nullptr;
   last_matches_ = 0;
   initial_kf_id_ = 0;
+  last_kf_checked_ = 0;
 }
 
 Map::~Map() {
@@ -110,11 +111,11 @@ void Map::UpdateMap() {
     UpdateCandidates(frame);
     if (frame->IsKeyframe()) {
       CheckConnections(frame);
-      //AddConnectionsPoints(frame);
+      AddConnectionsPoints(frame);
       InitCandidates(frame);
     } else {
       // Check redundant keyframes
-      //CheckRedundantKeyframes();
+      CheckRedundantKeyframes();
 
       // Delete frame after update
       {
@@ -609,8 +610,12 @@ void Map::CheckRedundantKeyframes() {
   int min_features = 3;
   int npoints, nmatches, nredundant;
   int size, level1, level2;
-
   vector<shared_ptr<Frame>> fov_kfs_;
+
+  // Don't check the same keyframe twice
+  if (last_kf_checked_ == last_kf_->GetID())
+    return;
+  last_kf_checked_ = last_kf_->GetID();
 
   // Check only local keyframes
   last_kf_->GetBestConnections(&fov_kfs_, 0);

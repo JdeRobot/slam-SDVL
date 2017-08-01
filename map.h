@@ -127,6 +127,7 @@ class Map {
   std::shared_ptr<Frame> last_kf_;  // Last Keyframe saved
   int last_matches_;                // Matches found in last iteration
   int initial_kf_id_;               // Id for initial keyframe
+  int last_kf_checked_;             // Last redundancy checked
 
   std::thread* thread_;
   bool running_;

@@ -78,10 +78,6 @@ void Bundle::Local(const vector<shared_ptr<Frame>> &kfs) {
       if (!point || point->ToDelete())
         continue;
 
-      // Only use fixed points
-      if (!point->IsFixed())
-        continue;
-
       // Skip if it has been already saved
       if (point->GetLastBA() != id_) {
         point->SetLastBA(id_);
@@ -166,6 +162,9 @@ void Bundle::Local(const vector<shared_ptr<Frame>> &kfs) {
       shared_ptr<Frame> frame = (*it_fts)->GetFrame();
 
       if (frame->ToDelete())
+        continue;
+
+      if(optimizer.vertex(id) == nullptr || optimizer.vertex(frame->GetID()) == nullptr)
         continue;
 
       g2o::EdgeSE3ProjectXYZ* e = new g2o::EdgeSE3ProjectXYZ();
