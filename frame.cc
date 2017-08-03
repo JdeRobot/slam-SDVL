@@ -33,6 +33,7 @@ int Frame::counter_ = 0;
 
 Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img) {
   id_ = counter_;
+  kf_id_ = 0;
   camera_ = camera;
   orb_detector_ = detector;
   pyramid_levels_ = Config::PyramidLevels();

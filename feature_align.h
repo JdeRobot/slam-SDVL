@@ -59,10 +59,10 @@ class FeatureAlign {
  private:
   // Select points to reproject. Return selected points.
   void SelectPoints(const std::shared_ptr<Frame> &frame, const std::shared_ptr<Frame> &last_frame,
-                      const std::shared_ptr<Frame> &last_kf, std::vector<PointInfo> *points);
+                      const std::shared_ptr<Frame> &last_kf, std::vector<std::shared_ptr<Feature>> *fs_found);
 
   // Rule out outiliers using RANSAC
-  void SelectInliers(const std::shared_ptr<Frame> &frame, std::vector<PointInfo> *points,
+  void SelectInliers(const std::shared_ptr<Frame> &frame, std::vector<std::shared_ptr<Feature>> &fs_found,
                     std::vector<std::shared_ptr<Feature>> *inliers, std::vector<std::shared_ptr<Feature>> *outliers);
 
   // Minimize reprojection error. Return observations
@@ -76,9 +76,6 @@ class FeatureAlign {
   // Remove outliers
   void RemoveOutliers(const std::shared_ptr<Frame> &frame, std::vector<std::shared_ptr<Feature>> *outliers);
 
-  // Get best point (if exists) from given cell
-  void GetPointFromCell(GridCell *cell, PointInfo *finfo);
-
   // Check reprojection error. Return number of inliers
   int CheckReprojectionError(const std::vector<std::shared_ptr<Feature>> features, const SE3 &se3, double threshold,
                              std::vector<std::shared_ptr<Feature>> *inliers = NULL,
@@ -88,7 +85,7 @@ class FeatureAlign {
   void ResetGrid();
 
   // Project points into frame
-  void ProjectPoints(const std::shared_ptr<Frame> &frame, const std::shared_ptr<Frame> &last_frame, const std::shared_ptr<Frame> &last_kf);
+  void ProjectPoints(const std::shared_ptr<Frame> &frame, const std::shared_ptr<Frame> &last_frame);
   bool ProjectPoint(const std::shared_ptr<Frame> &frame, const std::shared_ptr<Point> &point);
 
   // Converge frame pose to minimize reprojection error

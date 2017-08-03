@@ -57,7 +57,7 @@ FeatureAlign::~FeatureAlign() {
 }
 
 void FeatureAlign::Reproject(const shared_ptr<Frame> &frame, const shared_ptr<Frame> &last_frame, const shared_ptr<Frame> &last_kf, bool reloc) {
-  vector<PointInfo> selected_fs;
+  vector<shared_ptr<Feature>> selected_fs;
 
   inliers_.clear();
   outliers_.clear();
@@ -65,7 +65,7 @@ void FeatureAlign::Reproject(const shared_ptr<Frame> &frame, const shared_ptr<Fr
 
   // Select inliers
   SelectPoints(frame, last_frame, last_kf, &selected_fs);
-  SelectInliers(frame, &selected_fs, &inliers_, &outliers_);
+  SelectInliers(frame, selected_fs, &inliers_, &outliers_);
   cout << "[DEBUG] Selected points: " << selected_fs.size() << endl;
   cout << "[DEBUG] Inliers: " << inliers_.size() << " outliers " << outliers_.size() << endl;
 }
@@ -81,72 +81,85 @@ bool FeatureAlign::OptimizePose(const shared_ptr<Frame> &frame) {
   return true;
 }
 
+bool CompareQuality(const PointInfo &a, const PointInfo &b) {
+  return (a.first->Score() > b.first->Score());
+}
+
 void FeatureAlign::SelectPoints(const shared_ptr<Frame> &frame, const shared_ptr<Frame> &last_frame,
-                                 const shared_ptr<Frame> &last_kf, vector<PointInfo> *points) {
+                                 const shared_ptr<Frame> &last_kf, vector<shared_ptr<Feature>> *fs_found) {
+
+  Matcher matcher(Config::PatchSize());
+  Eigen::Vector2d pos;
+  bool found;
+  int level;
+
   // Project points in grid cells
-  ProjectPoints(frame, last_frame, last_kf);
+  ProjectPoints(frame, last_frame);
+
+  matches_ = 0;
+  num_attempts_ = 0;
 
   // In each cell, project only one point
   random_shuffle(cell_order_.begin(), cell_order_.end());
   int size = grid_.size();
-  for (int i=0; i < size; ++i) {
-    PointInfo finfo;
+  for (int i=0; i < size && matches_ < max_matches_; i++) {
+    found = false;
 
-    // Get best point in grid cell
-    GetPointFromCell(grid_.at(cell_order_[i]), &finfo);
-    if (finfo.first)
-      points->push_back(finfo);
-  }
-}
+    // Sort points according to their quality
+    GridCell * cell = grid_.at(cell_order_[i]);
+    cell->sort(CompareQuality);
 
-void FeatureAlign::SelectInliers(const shared_ptr<Frame> &frame, vector<PointInfo> *points,
-                                vector<shared_ptr<Feature>> *inliers, vector<shared_ptr<Feature>> *outliers) {
-  Matcher matcher(Config::PatchSize());
-  bool found;
-  Eigen::Vector2d pos;
-  int index, size, npoints;
-  vector<shared_ptr<Feature>> fs_found, selected, best_fs;
-  int supporters, best_supporters;
-  SE3 se3, best_se3;
-  int level;
+    // Try to match at least one point per cell
+    for (auto it=cell->begin(); it != cell->end() && !found; it++) {
+      shared_ptr<Point> point = it->first;
+      if (point->ToDelete())
+        continue;
 
-  matches_ = 0;
-  inliers->clear();
-  outliers->clear();
+      shared_ptr<Feature> feature = point->GetInitFeature();
+      if (!feature)
+        continue;
 
-  // Search points in current frame
-  for (auto it=points->begin(); it != points->end() && matches_ < max_matches_; it++) {
-    std::shared_ptr<Point> point = it->first;
-    shared_ptr<Feature> feature = point->GetInitFeature();
-    if (!feature)
-      continue;
+      num_attempts_++;
+      pos = it->second;
 
-    num_attempts_++;
-    pos = it->second;
-    found = matcher.SearchPoint(frame, feature, point->GetInverseDepth(), point->GetStd(), &pos, &level);
-    if (found) {
-      if (!relocalizing_) {
-        // Try to promote
-        point->Promote();
+      // Search point in current frame
+      found = matcher.SearchPoint(frame, feature, point->GetInverseDepth(), point->GetStd(), &pos, &level);
+      if (found) {
+        if (!relocalizing_) {
+          point->Promote();
 
-        // Link feature to point, the opposite will be done only if this frame is set as keyframe
-        shared_ptr<Feature> feature = std::make_shared<Feature>(frame, pos, level);
-        feature->SetPoint(point);
-        frame->AddFeature(feature);
+          // Link feature to point, the opposite will be done only if this frame is set as keyframe
+          shared_ptr<Feature> feature = std::make_shared<Feature>(frame, pos, level);
+          feature->SetPoint(point);
+          frame->AddFeature(feature);
 
-        point->SetStatus(Point::P_FOUND);
-        fs_found.push_back(feature);
-      }
-      matches_++;
-    } else {
-      if (!relocalizing_) {
-        // If feature is unpromoted, delete it
-        if (point->Unpromote())
-          map_->DeletePoint(point);
-        point->SetStatus(Point::P_NOT_FOUND);
+          point->SetStatus(Point::P_FOUND);
+          fs_found->push_back(feature);
+        }
+        matches_++;
+      } else {
+        if (!relocalizing_) {
+          // If feature is unpromoted, delete it
+          if (point->Unpromote())
+            map_->DeletePoint(point);
+          point->SetStatus(Point::P_NOT_FOUND);
+        }
       }
     }
   }
+}
+
+void FeatureAlign::SelectInliers(const shared_ptr<Frame> &frame, vector<shared_ptr<Feature>> &fs_found,
+                                vector<shared_ptr<Feature>> *inliers, vector<shared_ptr<Feature>> *outliers) {
+  Matcher matcher(Config::PatchSize());
+  Eigen::Vector2d pos;
+  int index, size, npoints;
+  vector<shared_ptr<Feature>> selected, best_fs;
+  int supporters, best_supporters;
+  SE3 se3, best_se3;
+
+  inliers->clear();
+  outliers->clear();
 
   if (fs_found.empty())
     return;
@@ -242,29 +255,6 @@ void FeatureAlign::RemoveOutliers(const shared_ptr<Frame> &frame, vector<shared_
   }
 }
 
-bool CompareQuality(const PointInfo &a, const PointInfo &b) {
-  return (a.first->Score() > b.first->Score());
-}
-
-void FeatureAlign::GetPointFromCell(GridCell *cell, PointInfo *finfo) {
-  bool found = false;
-
-  // Sort cells according to their quality
-  cell->sort(CompareQuality);
-
-  GridCell::iterator it = cell->begin();
-  while (it != cell->end() && !found) {
-    if (it->first->ToDelete()) {
-      it++;
-      continue;
-    }
-    finfo->first = it->first;
-    finfo->second = it->second;
-    found = true;
-    it++;
-  }
-}
-
 int FeatureAlign::CheckReprojectionError(const vector<shared_ptr<Feature>> features, const SE3 &se3, double threshold,
                                         vector<shared_ptr<Feature>> *inliers, vector<shared_ptr<Feature>> *outliers) {
   Eigen::Vector2d error;
@@ -303,40 +293,27 @@ void FeatureAlign::ResetGrid() {
   grid_used_.setZero();
 }
 
-void FeatureAlign::ProjectPoints(const shared_ptr<Frame> &frame, const shared_ptr<Frame> &last_frame, const shared_ptr<Frame> &last_kf) {
-  vector<shared_ptr<Frame>> fov_kfs_;
-  bool only_last = true;
-
+void FeatureAlign::ProjectPoints(const shared_ptr<Frame> &frame, const shared_ptr<Frame> &last_frame) {
   ResetGrid();
 
-  // Get keyframes that share frame's field of view
-  if (!only_last) {
-    last_kf->GetBestConnections(&fov_kfs_, Config::MaxSearchKeyframes()-1);
-    fov_kfs_.push_back(last_kf);
-  }
-  fov_kfs_.push_back(last_frame);
+  vector<shared_ptr<Feature>>& features = last_frame->GetFeatures();
 
-  // Reproject points from keyframes
-  for (auto it=fov_kfs_.begin(); it != fov_kfs_.end(); it++) {
-    vector<shared_ptr<Feature>>& features = (*it)->GetFeatures();
+  // Project points and calculate their corresponding grid cells
+  for (auto it_fts=features.begin(); it_fts != features.end(); it_fts++) {
+    if (*it_fts == nullptr)
+      continue;
 
-    // Project points and calculate their corresponding grid cells
-    for (auto it_fts=features.begin(); it_fts != features.end(); it_fts++) {
-      if (*it_fts == nullptr)
-        continue;
+    shared_ptr<Point> point = (*it_fts)->GetPoint();
+    if (!point || point->ToDelete())
+      continue;
 
-      shared_ptr<Point> point = (*it_fts)->GetPoint();
-      if (!point || point->ToDelete())
-        continue;
+    // Check if point has already been projected in this frame
+    if (frame->GetID() == point->GetLastFrame())
+      continue;
 
-      // Check if point has already been projected in this frame
-      if (frame->GetID() == point->GetLastFrame())
-        continue;
-
-      ProjectPoint(frame, point);
-      if (!relocalizing_)
-        point->SetLastFrame(frame->GetID());
-    }
+    ProjectPoint(frame, point);
+    if (!relocalizing_)
+      point->SetLastFrame(frame->GetID());
   }
 }
 

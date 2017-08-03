@@ -81,7 +81,7 @@ bool HomographyInit::InitSecondFrame(const shared_ptr<Frame> &frame) {
   Eigen::Vector2d p1, p2;
   int nfeatures, dist;
   shared_ptr<Feature> feature1, feature2;
-  bool fixed = true;
+  bool fixed = false;
 
   frame2_ = frame;
   camera = frame2_->GetCamera();

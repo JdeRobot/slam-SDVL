@@ -39,13 +39,13 @@ Map::Map(int cell_size) {
   n_initializations_ = 0;
 
   candidates_updating_halt_ = false;
-  new_keyframe_set_ = false;
   relocalizing_ = false;
   ba_kf_ = nullptr;
   last_kf_ = nullptr;
   last_matches_ = 0;
   initial_kf_id_ = 0;
   last_kf_checked_ = 0;
+  num_kfs_ = 0;
 }
 
 Map::~Map() {
@@ -80,7 +80,7 @@ void Map::UpdateMap() {
 
   {
     std::unique_lock<std::mutex> lock(mutex_map_);
-    is_empty = frame_queue_.empty();
+    is_empty = frame_queue_.empty() && keyframe_queue_.empty();
   }
 
   if (!is_empty) {
@@ -89,21 +89,25 @@ void Map::UpdateMap() {
     // Get next frame
     {
       std::unique_lock<std::mutex> lock(mutex_map_);
-      if (new_keyframe_set_) {
-        // Search keyframe
-        do {
-          assert(!frame_queue_.empty());
+      if(!keyframe_queue_.empty()) {
+        // Ignore standard frames
+        while(!frame_queue_.empty()) {
           frame = frame_queue_.front();
           frame_queue_.pop();
-          if (!frame->IsKeyframe())
-            frame_trash_.push_back(frame);
-        } while (!frame->IsKeyframe());
+          frame_trash_.push_back(frame);
+        }
+
+        // Get last keyframe
+        frame = keyframe_queue_.front();
+        keyframe_queue_.pop();
       } else {
+        assert(!frame_queue_.empty());
+
         // Get last frame
         frame = frame_queue_.front();
         frame_queue_.pop();
       }
-      new_keyframe_set_ = false;
+
       candidates_updating_halt_ = false;
     }
 
@@ -142,12 +146,13 @@ void Map::UpdateMap() {
 void Map::AddKeyframe(const shared_ptr<Frame> &frame, bool search) {
   if (search) {
     std::unique_lock<std::mutex> lock(mutex_map_);
-    new_keyframe_set_ = true;
     candidates_updating_halt_ = true;
-    frame_queue_.push(frame);
+    keyframe_queue_.push(frame);
   } else {
     initial_kf_id_ = std::max(initial_kf_id_, frame->GetID());
   }
+  num_kfs_++;
+  frame->SetKeyframeID(num_kfs_);
   keyframes_.push_back(frame);
   last_kf_ = frame;
   ba_kf_ = frame;
@@ -394,16 +399,16 @@ void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
   Matcher matcher(Config::PatchSize());
   Eigen::Vector3d pos;
   Eigen::Vector2d imgpos;
-  int level, maxupdates = 2000;
+  int level, min_kf_id;
   bool halt;
   double depth_mean, depth, distance, cos_alpha;
   double px_error_angle = frame->GetCamera()->GetPixelErrorAngle();
-  int index = std::max(0, static_cast<int>(candidates_.size())-maxupdates);
 
   depth_mean = frame->GetSceneDepth();
+  min_kf_id = last_kf_->GetKeyframeID() - 2*Config::MaxSearchKeyframes();
 
   // Update candidates
-  vector<shared_ptr<Point>>::iterator it = candidates_.begin()+index;
+  vector<shared_ptr<Point>>::iterator it = candidates_.begin();
   while (it != candidates_.end()) {
     {
       std::unique_lock<std::mutex> lock(mutex_map_);
@@ -419,18 +424,19 @@ void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
 
     // Check if we have to delete it
     if (point->ToDelete()) {
-      {
-        std::unique_lock<std::mutex> lock(mutex_map_);
-        points_trash_.push_back(point);
-      }
+      DeletePoint(point);
       it = candidates_.erase(it);
       continue;
     }
 
-    // Get point position and check if is visible from current FOV
+    // Delete candidates not visible and too old
     pos = point->GetPosition();
     if (!frame->IsPointVisible(pos)) {
-      it++;
+      if (point->GetLastFeature()->GetFrame()->GetKeyframeID() < min_kf_id) {
+        DeletePoint(point);
+        it = candidates_.erase(it);
+      } else
+        it++;
       continue;
     }
 

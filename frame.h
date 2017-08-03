@@ -70,6 +70,9 @@ class Frame {
   inline int GetHeight() const { return height_; }
   inline int GetID() const { return id_; }
 
+  inline void SetKeyframeID(int id) { kf_id_ = id; }
+  inline int GetKeyframeID() const { return kf_id_; }
+
   inline bool IsSelected() { return selected_; }
   inline void SetSelected(bool v) { selected_ = v; }
 
@@ -145,6 +148,7 @@ class Frame {
   void CreatePyramid(const cv::Mat& img);
 
   int id_;                      // Frame unique id
+  int kf_id_;                   // Keyframe unique id
   Camera * camera_;             // Camera model
   ORBDetector * orb_detector_;  // ORB detector
   int pyramid_levels_;          // Pyramid levels calculated
