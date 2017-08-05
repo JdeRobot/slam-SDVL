@@ -41,7 +41,7 @@ class Feature;
 
 class Map {
  public:
-  explicit Map(int cell_size);
+  explicit Map();
   ~Map();
 
   // Start/Stop Map thread
@@ -121,7 +121,6 @@ class Map {
 
   bool candidates_updating_halt_;   // Stops candidates updating
   int n_initializations_;           // Number of keyframes where candidates where created
-  int cell_size_;                   // Grid cell size
   bool relocalizing_;               // True if tracking is relocalizing
   std::shared_ptr<Frame> ba_kf_;    // Keyframe to do bundle adjuntment
   std::shared_ptr<Frame> last_kf_;  // Last Keyframe saved

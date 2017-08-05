@@ -30,9 +30,9 @@ using std::endl;
 
 namespace sdvl {
 
-FeatureAlign::FeatureAlign(Map *map, Camera *camera, int cell_size, int max_matches) {
+FeatureAlign::FeatureAlign(Map *map, Camera *camera, int max_matches) {
   map_ = map;
-  cell_size_ = cell_size;
+  cell_size_ = Config::CellSize();
   max_matches_ = max_matches;
   matches_ = 0;
   num_attempts_ = 0;

@@ -43,41 +43,28 @@ struct CandidateCorner {
 
 class FastDetector {
  public:
-  explicit FastDetector(int size = 0);
-  FastDetector(int width, int height, int size);
-
-  // Detect fast corners with non maximum suppresion.
-  void Detect(const cv::Mat &src, std::vector<Eigen::Vector2i> *corners);
-  void DetectCV(const cv::Mat &src, std::vector<Eigen::Vector2i> *corners, bool nms);
+  FastDetector(int width, int height, bool grid=true);
 
   // Detect fast corners in an image pyramid. Return corners with their pyramid level
-  void DetectPyramid(const std::vector<cv::Mat> &pyramid, std::vector<std::vector<Eigen::Vector2i>> *corners);
+  void DetectPyramid(const std::vector<cv::Mat> &pyramid, std::vector<std::vector<Eigen::Vector2i>> *corners, int nfeatures);
 
   // Filter corners choosing the best corner for each image grid cell
   void FilterCorners(const std::vector<cv::Mat> &pyramid, const std::vector<std::vector<Eigen::Vector2i>> &corners,
                      std::vector<Eigen::Vector3i> *fcorners);
-
-  // Init new grid
-  void InitGrid(int width, int height);
-
-  // Reset grid mask
-  void ResetGrid();
 
   // Lock/Unlock a grid cell
   void LockCell(Eigen::Vector2d p);
   void UnlockCell(Eigen::Vector2d p);
 
  private:
-  // Calculate fast corners
-  void FastCornerDetector_10(const cv::Mat &src, std::vector<Eigen::Vector2i> *corners, int threshold);
+  // Detect N fast corners in given image
+  void SelectPixels(const cv::Mat &src, std::vector<Eigen::Vector2i> *pixels, int nfeatures);
 
-  // Compute score for each corner
-  void ComputeFastScore(const cv::Mat &src, const std::vector<Eigen::Vector2i> &corners, int threshold, std::vector<int> *scores);
-  int CornerScore(const cv::Mat &src, const Eigen::Vector2i &c, const int *pointer_dir, int threshold);
+  // Init new grid
+  void InitGrid(int width, int height);
 
-  // Get nonmax suppression features
-  void NonMaxSuppression(const cv::Mat &src, const std::vector<Eigen::Vector2i> &corners_in, std::vector<Eigen::Vector2i> *corners_out);
-  void NonMaxSuppression(const std::vector<Eigen::Vector2i> &corners, const std::vector<int> &scores, std::vector<Eigen::Vector2i> *nonmax_corners);
+  // Reset grid mask
+  void ResetGrid();
 
   std::vector<CandidateCorner> corners_grid_;   // Grid with corners detected
   std::vector<bool> grid_mask_;                 // Mask with locked grid cells

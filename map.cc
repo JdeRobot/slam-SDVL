@@ -34,8 +34,7 @@ using std::endl;
 
 namespace sdvl {
 
-Map::Map(int cell_size) {
-  cell_size_ = cell_size;
+Map::Map() {
   n_initializations_ = 0;
 
   candidates_updating_halt_ = false;
@@ -280,7 +279,7 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
     return;
 
   // Filter frame corners
-  frame->FilterCorners(cell_size_);
+  frame->FilterCorners();
   vector<Eigen::Vector3i> &fcorners = frame->GetFilteredCorners();
   vector<vector<uchar>>& descriptors = frame->GetFilteredDescriptors();
   vector<bool> imatches(fcorners.size(), false);

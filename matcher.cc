@@ -117,7 +117,6 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
   // Get corners for this level and search
   cv::Mat &cimg = frame->GetPyramid()[level];
   vector<Eigen::Vector2i>& corners = frame->GetCorners()[level];
-  vector<int>& corners_rows = frame->GetCornersRows()[level];
   vector<vector<uchar>>& descriptors = frame->GetDescriptors()[level];
 
   if (Config::UseORB())
@@ -140,21 +139,13 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
   vline = (xdiff)*(xdiff) + (ydiff)*(ydiff);
 
   // Get corners close to epipolar line
-  vector<Eigen::Vector2i>::iterator it, it_end;
   int rowtop = std::max(0, static_cast<int>(std::min(pxa(1)-range, pxb(1)-range)));
   int rowbottom = std::max(pxa(1)+range, pxb(1)+range)+1;
-  int colright = std::max(pxa(0)+range, pxb(0)+range);
 
   int scaled_top = rowtop/(1 << level);
   int scaled_bottom = rowbottom/(1 << level);
   if (scaled_top >= cimg.rows || scaled_bottom < 0)
     return false;
-
-  it = corners.begin() + corners_rows[scaled_top];
-  if (scaled_bottom >= cimg.rows)
-    it_end = corners.end();
-  else
-    it_end = corners.begin() + corners_rows[scaled_bottom];
 
   if (!Config::UseORB()) {
     // Compute ZMSSD with corners close to selected feature
@@ -162,33 +153,22 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
   }
 
   // Check each corner
-  for (; it < it_end;) {
+  for (auto it = corners.begin(); it != corners.end(); it++) {
     Eigen::Vector2d pos((*it)(0)*(1 << level), (*it)(1)*(1 << level));
 
     if (!Config::UseORB()) {
       // Check borders
-      if ((*it)(0)-half_size < 0 || (*it)(1)-half_size < 0) {
-        it++;
+      if ((*it)(0)-half_size < 0 || (*it)(1)-half_size < 0)
         continue;
-      }
-      if ((*it)(1)+half_size >= cimg.rows || (*it)(0)+half_size >= cimg.cols) {
-        it++;
-        continue;
-      }
-    }
 
-    // If crossed max column, skip corner
-    if (pos(0) > colright) {
-      it = corners.begin() + corners_rows[(*it)(1)+1];
-      continue;
+      if ((*it)(1)+half_size >= cimg.rows || (*it)(0)+half_size >= cimg.cols)
+        continue;
     }
 
     // Check distance from feature to epipolar line
     dist = normdist - pos.dot(vnormal);
-    if (abs(dist) > range) {
-      it++;
+    if (abs(dist) > range)
       continue;
-    }
 
     // Get the u parameter in the equation P = A+u(B-A)
     u = ((pos(0)-pxa(0))*xdiff+(pos(1)-pxa(1))*ydiff)/vline;
@@ -196,20 +176,16 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
       // Check distance to b
       dx = pos(0)-pxb(0);
       dy = pos(1)-pxb(1);
-      if ((dx*dx+dy*dy) > range2) {
-        it++;
+      if ((dx*dx+dy*dy) > range2)
         continue;
-      }
     }
 
     if (u < 0) {
       // Check distance to a
       dx = pos(0)-pxa(0);
       dy = pos(1)-pxa(1);
-      if ((dx*dx+dy*dy) > range2) {
-        it++;
+      if ((dx*dx+dy*dy) > range2)
         continue;
-      }
     }
 
     if (Config::UseORB()) {
@@ -220,15 +196,12 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
         if (!detector_.GetDescriptor(cimg, *it, &descriptors[index])) {
           // Resize again and set zero (not valid)
           descriptors[index].resize(1, 0);
-          it++;
           continue;
         }
       } else {
         // Check if valid
-        if (descriptors[index].size() != 32) {
-          it++;
+        if (descriptors[index].size() != 32)
           continue;
-        }
       }
 
       // Compare descriptors
@@ -243,8 +216,6 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
       best_score = score;
       best_px = pos;
     }
-
-    it++;
   }
 
   if (best_score >= threshold)
@@ -265,7 +236,6 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
   // Get corners for this level and search
   cv::Mat &cimg = frame->GetPyramid()[level];
   vector<Eigen::Vector2i>& corners = frame->GetCorners()[level];
-  vector<int>& corners_rows = frame->GetCornersRows()[level];
   vector<vector<uchar>>& descriptors = frame->GetDescriptors()[level];
 
   if (Config::UseORB())
@@ -280,18 +250,11 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
   vector<Eigen::Vector2i>::iterator it, it_end;
   int rowtop = std::max(0, static_cast<int>(cpos(1)-range));
   int rowbottom = cpos(1)+range+1;
-  int colright = cpos(0)+range;
 
   int scaled_top = rowtop/(1 << level);
   int scaled_bottom = rowbottom/(1 << level);
   if (scaled_top >= cimg.rows || scaled_bottom < 0)
     return false;
-
-  it = corners.begin() + corners_rows[scaled_top];
-  if (scaled_bottom >= cimg.rows)
-    it_end = corners.end();
-  else
-    it_end = corners.begin() + corners_rows[scaled_bottom];
 
   if (!Config::UseORB()) {
     // Compute ZMSSD with corners close to selected feature
@@ -299,32 +262,21 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
   }
 
   // Check each corner
-  for (; it < it_end;) {
+  for (auto it = corners.begin(); it != corners.end(); it++) {
     Eigen::Vector2d pos((*it)(0)*(1 << level), (*it)(1)*(1 << level));
 
     if (!Config::UseORB()) {
       // Check borders
-      if ((*it)(0)-half_size < 0 || (*it)(1)-half_size < 0) {
-        it++;
+      if ((*it)(0)-half_size < 0 || (*it)(1)-half_size < 0)
         continue;
-      }
-      if ((*it)(1)+half_size >= cimg.rows || (*it)(0)+half_size >= cimg.cols) {
-        it++;
-        continue;
-      }
-    }
 
-    // If crossed max column, skip corner
-    if (pos(0) > colright) {
-      it = corners.begin() + corners_rows[(*it)(1)+1];
-      continue;
+      if ((*it)(1)+half_size >= cimg.rows || (*it)(0)+half_size >= cimg.cols)
+        continue;
     }
 
     // Reject features outside circle
-    if ((cpos - pos).squaredNorm() > range2) {
-      it++;
+    if ((cpos - pos).squaredNorm() > range2)
       continue;
-    }
 
     if (Config::UseORB()) {
       index = it-corners.begin();
@@ -334,15 +286,12 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
         if (!detector_.GetDescriptor(cimg, *it, &descriptors[index])) {
           // Resize again and set zero (not valid)
           descriptors[index].resize(1, 0);
-          it++;
           continue;
         }
       } else {
         // Check if valid
-        if (descriptors[index].size() != 32) {
-          it++;
+        if (descriptors[index].size() != 32)
           continue;
-        }
       }
 
       // Compare descriptors
@@ -357,8 +306,6 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
       best_score = score;
       best_px = pos;
     }
-
-    it++;
   }
 
   if (best_score >= threshold)

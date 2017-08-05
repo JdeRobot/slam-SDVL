@@ -42,14 +42,14 @@ class Frame {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img);
+  Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img, bool corners);
   ~Frame();
 
   bool IsKeyframe() { return is_keyframe_; }
   void SetKeyframe();
 
   // Filter corners (required with Keyframes)
-  void FilterCorners(int cell_size);
+  void FilterCorners();
 
   inline SE3& GetPose() { return pose_; }
   inline const SE3& GetPose() const { return pose_; }
@@ -58,7 +58,6 @@ class Frame {
   inline std::vector<cv::Mat>& GetPyramid() { return pyramid_; }
   inline std::vector<std::shared_ptr<Feature>>& GetFeatures() { return features_; }
   inline std::vector<std::vector<Eigen::Vector2i>>& GetCorners() { return corners_; }
-  inline std::vector<std::vector<int>>& GetCornersRows() { return corners_rows_; }
   inline std::vector<Eigen::Vector3i>& GetFilteredCorners() { return filtered_corners_; }
   inline std::vector<Eigen::Vector2d>& GetOutliers() { return outliers_; }
 
@@ -138,7 +137,7 @@ class Frame {
   }
 
   // Create corners
-  void CreateCorners(int levels);
+  void CreateCorners(int levels, int nfeatures);
 
   // Remove features
   void RemoveFeatures();
@@ -162,7 +161,6 @@ class Frame {
 
   std::vector<std::shared_ptr<Feature>> features_;      // Features detected in this frame
   std::vector<std::vector<Eigen::Vector2i>> corners_;   // Corners detected in each pyramid level
-  std::vector<std::vector<int>> corners_rows_;          // Pointers to corners in each row
   std::vector<Eigen::Vector3i> filtered_corners_;       // Corners filtered. Third parameter to store level
   std::vector<Eigen::Vector2d> outliers_;               // Outliers, only for DEBUG
 

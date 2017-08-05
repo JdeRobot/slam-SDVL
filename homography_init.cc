@@ -33,9 +33,8 @@ using std::endl;
 
 namespace sdvl {
 
-HomographyInit::HomographyInit(Map * map, int cell_size, int min_shift) {
+HomographyInit::HomographyInit(Map * map, int min_shift) {
   map_ = map;
-  cell_size_ = cell_size;
   min_shift_ = min_shift;
 }
 
@@ -54,7 +53,7 @@ bool HomographyInit::InitFirstFrame(const shared_ptr<Frame> &frame) {
   frame1_ = frame;
 
   // Filter corners
-  frame1_->FilterCorners(cell_size_);
+  frame1_->FilterCorners();
   vector<Eigen::Vector3i> &fcorners = frame1_->GetFilteredCorners();
 
   pixels1_.clear();

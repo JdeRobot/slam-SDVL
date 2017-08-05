@@ -43,7 +43,7 @@ class FeatureAlign {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  FeatureAlign(Map *map, Camera *camera, int cell_size, int max_matches);
+  FeatureAlign(Map *map, Camera *camera, int max_matches);
   ~FeatureAlign();
 
   // Reproject all points in current frame found in other frames

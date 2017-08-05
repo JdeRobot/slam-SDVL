@@ -48,7 +48,7 @@ class HomographyInit {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  HomographyInit(Map * map, int cell_size, int min_shift);
+  HomographyInit(Map * map, int min_shift);
   ~HomographyInit() {}
 
   bool InitFirstFrame(const std::shared_ptr<Frame> &frame);
@@ -89,7 +89,6 @@ class HomographyInit {
   std::vector<Eigen::Vector3d> vectors1_;   // 3D vectors for each 2d pixel
   std::vector<Eigen::Vector3d> vectors2_;   // 3D vectors for each 2d pixel
 
-  int cell_size_;   // Grid cell size
   int min_shift_;   // Min average shift between features
 
   Eigen::Matrix3d bestH_;       // Best homography calculated
