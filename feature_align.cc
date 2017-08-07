@@ -123,7 +123,7 @@ void FeatureAlign::SelectPoints(const shared_ptr<Frame> &frame, const shared_ptr
       pos = it->second;
 
       // Search point in current frame
-      found = matcher.SearchPoint(frame, feature, point->GetInverseDepth(), point->GetStd(), &pos, &level);
+      found = matcher.SearchPoint(frame, feature, point->GetInverseDepth(), point->GetStd(), point->IsFixed(), &pos, &level);
       if (found) {
         if (!relocalizing_) {
           point->Promote();

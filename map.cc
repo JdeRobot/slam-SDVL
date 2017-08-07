@@ -128,7 +128,7 @@ void Map::UpdateMap() {
     }
 
     // Check Bundle adjustment
-    int size = (int)keyframes_.size();
+    int size = static_cast<int>(keyframes_.size());
     if (size > 2 &&  ba_kf_ != nullptr) {
       Timer timerba(true);
       BundleAdjustment();
@@ -263,7 +263,8 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
   Matcher matcher(Config::PatchSize());
   shared_ptr<Feature> feature2;
   Eigen::Vector2d imgpos;
-  int level, index;
+  Eigen::Vector3i corner;
+  int count, index, level, scale;
   double depth, depth_mean, distance, cos_alpha;
   bool fixed = false;
 
@@ -280,12 +281,11 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
 
   // Filter frame corners
   frame->FilterCorners();
-  vector<Eigen::Vector3i> &fcorners = frame->GetFilteredCorners();
-  vector<vector<uchar>>& descriptors = frame->GetFilteredDescriptors();
-  vector<bool> imatches(fcorners.size(), false);
 
-  if (Config::UseORB())
-    assert(descriptors.size() == fcorners.size());
+  vector<Eigen::Vector3i> &corners = frame->GetCorners();
+  vector<int> &fcorners = frame->GetFilteredCorners();
+  vector<vector<uchar>> &descriptors = frame->GetDescriptors();
+  vector<bool> imatches(fcorners.size(), false);
 
   {
     std::unique_lock<std::mutex> lock(mutex_map_);
@@ -304,21 +304,26 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
       continue;
 
     // Try to initialize a candidate for every corner
-    index = 0;
-    for (auto it=fcorners.begin(); it != fcorners.end(); it++, index++) {
-      if (imatches[index])
+    count = 0;
+    for (auto it=fcorners.begin(); it != fcorners.end(); it++, count++) {
+      if (imatches[count])
         continue;
 
+      index = *it;
+      corner = corners[index];
+      scale = (1 << corner(2));
+
       shared_ptr<Point> candidate = std::make_shared<Point>();
-      shared_ptr<Feature> feature = std::make_shared<Feature>(frame, Eigen::Vector2d((*it)(0), (*it)(1)), (*it)(2));
+      shared_ptr<Feature> feature = std::make_shared<Feature>(frame, Eigen::Vector2d(corner(0)*scale, corner(1)*scale), corner(2));
 
       if (Config::UseORB()) {
-        // Get descriptor
-        feature->GetDescriptor() = descriptors[index];
+        // Save descriptor
+        assert(!descriptors[index].empty());
+        feature->SetDescriptor(descriptors[index]);
       }
 
       // Search corner in closest keyframe
-      if (!matcher.SearchPoint(cframe, feature, 1.0/depth_mean, 1.0, &imgpos, &level))
+      if (!matcher.SearchPoint(cframe, feature, 1.0/depth_mean, 1.0, false, &imgpos, &level))
         continue;
 
       // Compare to 3D points seen from selected frame
@@ -333,7 +338,7 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
           continue;
 
         // Close feature
-        if(Distance2D(imgpos, (*it_fts)->GetPosition()) < 1.0) {
+        if (Distance2D(imgpos, (*it_fts)->GetPosition()) < 1.0) {
           // Link feature and point
           std::unique_lock<std::mutex> lock(mutex_map_);
           feature->SetPoint(point);
@@ -374,7 +379,7 @@ void Map::InitCandidates(const shared_ptr<Frame> &frame) {
         feature2->SetPoint(candidate);
       }
 
-      imatches[index] = true;
+      imatches[count] = true;
       candidates_.push_back(candidate);
 
       if (fixed) {
@@ -434,8 +439,9 @@ void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
       if (point->GetLastFeature()->GetFrame()->GetKeyframeID() < min_kf_id) {
         DeletePoint(point);
         it = candidates_.erase(it);
-      } else
+      } else {
         it++;
+      }
       continue;
     }
 
@@ -449,7 +455,7 @@ void Map::UpdateCandidates(const shared_ptr<Frame> &frame) {
     }
 
     // Find candidate in epipolar line
-    if (!matcher.SearchPoint(frame, feature, point->GetInverseDepth(), point->GetStd(), &imgpos, &level)) {
+    if (!matcher.SearchPoint(frame, feature, point->GetInverseDepth(), point->GetStd(), false, &imgpos, &level)) {
       if (point->Unpromote())
         DeletePoint(point);
       it++;
@@ -565,7 +571,6 @@ void Map::AddConnectionsPoints(const std::shared_ptr<Frame> &frame) {
   // Select points not seen yet
   std::set<shared_ptr<Point>> points;
   for (auto it_kf=best_kfs.begin(); it_kf != best_kfs.end(); it_kf++) {
-
     // Get 3D points seen from this keyframe
     vector<shared_ptr<Feature>>& features = (*it_kf)->GetFeatures();
     for (auto it_fts=features.begin(); it_fts != features.end(); it_fts++) {
@@ -599,7 +604,7 @@ void Map::AddConnectionsPoints(const std::shared_ptr<Frame> &frame) {
     if (!frame->GetCamera()->IsInsideImage(pos.cast<int>(), Config::PatchSize()))
       continue;
 
-    found = matcher.SearchPoint(frame, feature, (*it_pts)->GetInverseDepth(), (*it_pts)->GetStd(), &pos, &level);
+    found = matcher.SearchPoint(frame, feature, (*it_pts)->GetInverseDepth(), (*it_pts)->GetStd(), (*it_pts)->IsFixed(), &pos, &level);
     if (found) {
       // Link feature and point
       std::unique_lock<std::mutex> lock(mutex_map_);

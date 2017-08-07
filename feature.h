@@ -75,13 +75,13 @@ class Feature {
     return level_;
   }
 
-  inline std::vector<uchar> & GetDescriptor() {
-    has_descriptor_ = true;
+  inline const std::vector<uchar> & GetDescriptor() const {
     return descriptor_;
   }
 
-  inline const std::vector<uchar> & GetDescriptor() const {
-    return descriptor_;
+  inline void SetDescriptor(const std::vector<uchar> &d) {
+    copy(d.begin(), d.end(), descriptor_.begin());
+    has_descriptor_ = true;
   }
 
   inline bool HasDescriptor() const {

@@ -31,26 +31,15 @@
 
 namespace sdvl {
 
-// Store detected corner information
-struct CandidateCorner {
-  int x;          // X image coordinate
-  int y;          // Y image coordinate
-  int level;      // Pyramid level where it was detected
-  double score;   // Corner score
-  explicit CandidateCorner(double s) : x(0), y(0), level(0), score(s) {}
-  CandidateCorner(int x, int y, int l, double s) : x(x), y(y), level(l), score(s) {}
-};
-
 class FastDetector {
  public:
   FastDetector(int width, int height, bool grid=true);
 
   // Detect fast corners in an image pyramid. Return corners with their pyramid level
-  void DetectPyramid(const std::vector<cv::Mat> &pyramid, std::vector<std::vector<Eigen::Vector2i>> *corners, int nfeatures);
+  void DetectPyramid(const std::vector<cv::Mat> &pyramid, std::vector<Eigen::Vector3i> *corners, int nfeatures);
 
   // Filter corners choosing the best corner for each image grid cell
-  void FilterCorners(const std::vector<cv::Mat> &pyramid, const std::vector<std::vector<Eigen::Vector2i>> &corners,
-                     std::vector<Eigen::Vector3i> *fcorners);
+  void FilterCorners(const std::vector<cv::Mat> &pyramid, const std::vector<Eigen::Vector3i> &corners, std::vector<int> *indices);
 
   // Lock/Unlock a grid cell
   void LockCell(Eigen::Vector2d p);
@@ -58,7 +47,7 @@ class FastDetector {
 
  private:
   // Detect N fast corners in given image
-  void SelectPixels(const cv::Mat &src, std::vector<Eigen::Vector2i> *pixels, int nfeatures);
+  void SelectPixels(const cv::Mat &src, std::vector<Eigen::Vector3i> *pixels, int level, int nfeatures);
 
   // Init new grid
   void InitGrid(int width, int height);
@@ -66,7 +55,7 @@ class FastDetector {
   // Reset grid mask
   void ResetGrid();
 
-  std::vector<CandidateCorner> corners_grid_;   // Grid with corners detected
+  std::vector<std::pair<int, int>> cgrid_;      // Grid with corners detected: Index and score
   std::vector<bool> grid_mask_;                 // Mask with locked grid cells
   int grid_width_;                              // Grid width
   int grid_height_;                             // Grid height

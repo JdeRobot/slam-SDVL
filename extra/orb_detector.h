@@ -36,8 +36,7 @@ class ORBDetector {
   ORBDetector();
 
   // Get descriptor for given feature
-  bool GetDescriptor(const cv::Mat &src, const Eigen::Vector2i &p, std::vector<uchar> *desc, int level = 0);
-  bool GetDescriptord(const cv::Mat &src, const Eigen::Vector2d &p, std::vector<uchar> *desc, int level = 0);
+  bool GetDescriptor(const cv::Mat &src, const Eigen::Vector2i &pos, std::vector<uchar> *desc);
 
   // Bit set count
   int Distance(const std::vector<uchar> &a, const std::vector<uchar> &b);

@@ -36,12 +36,12 @@ FastDetector::FastDetector(int width, int height, bool grid) {
 }
 
 void FastDetector::InitGrid(int width, int height) {
-  corners_grid_.resize(grid_width_*grid_height_, CandidateCorner(Config::MinFeatureScore()));
+  cgrid_.resize(grid_width_*grid_height_, std::make_pair(0, Config::MinFeatureScore()));
   grid_mask_.resize(grid_width_*grid_height_, false);
 }
 
 void FastDetector::ResetGrid() {
-  fill(corners_grid_.begin(), corners_grid_.end(), CandidateCorner(Config::MinFeatureScore()));
+  fill(cgrid_.begin(), cgrid_.end(), std::make_pair(0, Config::MinFeatureScore()));
   fill(grid_mask_.begin(), grid_mask_.end(), false);
 }
 
@@ -55,13 +55,13 @@ void FastDetector::UnlockCell(Eigen::Vector2d p) {
   grid_mask_.at(index) = false;
 }
 
-void FastDetector::SelectPixels(const cv::Mat &src, std::vector<Eigen::Vector2i> *pixels, int nfeatures) {
+void FastDetector::SelectPixels(const cv::Mat &src, std::vector<Eigen::Vector3i> *pixels, int level, int nfeatures) {
   int initx, inity, maxx, maxy;
   int margin;
   int nempty;
 
   if (Config::UseORB())
-    margin = 1+Config::ORBSize()/2;
+    margin = 4+Config::ORBSize()/2;
   else
     margin = 1+Config::PatchSize()/2;
 
@@ -148,15 +148,14 @@ void FastDetector::SelectPixels(const cv::Mat &src, std::vector<Eigen::Vector2i>
     cv::KeyPointsFilter::retainBest(fts,nfeatures);
 
   for (auto it=fts.begin(); it != fts.end(); it++)
-    pixels->push_back(Eigen::Vector2i((*it).pt.x, (*it).pt.y));
+    pixels->push_back(Eigen::Vector3i((*it).pt.x, (*it).pt.y, level));
 }
 
-void FastDetector::DetectPyramid(const vector<cv::Mat> &pyramid, std::vector<std::vector<Eigen::Vector2i>> *corners, int nfeatures) {
+void FastDetector::DetectPyramid(const vector<cv::Mat> &pyramid, std::vector<Eigen::Vector3i> *corners, int nfeatures) {
   int levelfeatures;
   double val, scale, factor;
 
   assert(static_cast<int>(pyramid.size()) >= Config::MaxFastLevels());
-  assert(static_cast<int>(corners->size()) == Config::MaxFastLevels());
 
   // Calc features detected per level
   scale = 1.2;
@@ -170,52 +169,51 @@ void FastDetector::DetectPyramid(const vector<cv::Mat> &pyramid, std::vector<std
 
   // Detect fast corners for each pyramid level
   for (int i=0; i < Config::MaxFastLevels(); i++) {
-    SelectPixels(pyramid[i], &(*corners)[i], levelfeatures);
+    SelectPixels(pyramid[i], corners, i, levelfeatures);
     levelfeatures = static_cast<int>(levelfeatures/scale);
   }
 }
 
-void FastDetector::FilterCorners(const std::vector<cv::Mat> &pyramid, const std::vector<std::vector<Eigen::Vector2i>> &corners,
-                     std::vector<Eigen::Vector3i> *fcorners) {
-  int margin;
-  int pos, px, py, scale;
+void FastDetector::FilterCorners(const vector<cv::Mat> &pyramid, const vector<Eigen::Vector3i> &corners, vector<int> *indices) {
+  int index, margin;
+  int pos, px, py, scale, level;
   double score;
 
   // Set margin
   if (Config::UseORB())
-    margin = 1+Config::ORBSize()/2;
+    margin = 4+Config::ORBSize()/2;
   else
     margin = 1+Config::PatchSize()/2;
 
-  for (int level=0; level < Config::MaxFastLevels(); level++) {
 
-    // Save a corner in each grid cell
-    for (auto it=corners[level].begin(); it != corners[level].end(); it++) {
-      px = (*it)(0);
-      py = (*it)(1);
-      scale = (1 << level);
+  // Save a corner in each grid cell
+  index = 0;
+  for (auto it=corners.begin(); it != corners.end(); it++, index++) {
+    px = (*it)(0);
+    py = (*it)(1);
+    level = (*it)(2);
+    scale = (1 << level);
 
-      if (px < margin || py < margin || px >= pyramid[level].cols-margin || py >= pyramid[level].rows-margin)
-        continue;
+    if (px < margin || py < margin || px >= pyramid[level].cols-margin || py >= pyramid[level].rows-margin)
+      continue;
 
-      pos = static_cast<int>((py*scale)/cell_size_)*grid_width_ + static_cast<int>((px*scale)/cell_size_);
+    pos = static_cast<int>((py*scale)/cell_size_)*grid_width_ + static_cast<int>((px*scale)/cell_size_);
 
-      // Check if cell is locked
-      if (grid_mask_[pos])
-        continue;
+    // Check if cell is locked
+    if (grid_mask_[pos])
+      continue;
 
-      // Save corner according to its Shi-Thomasi score
-      score = FindShiTomasiScoreAtPoint(pyramid[level], px, py);
-      if (score > corners_grid_.at(pos).score) {
-        corners_grid_.at(pos) = CandidateCorner(px*scale, py*scale, level, score);
-      }
+    // Save corner according to its Shi-Thomasi score
+    score = FindShiTomasiScoreAtPoint(pyramid[level], px, py);
+    if (score > cgrid_.at(pos).second) {
+      cgrid_.at(pos) = std::make_pair(index, score);
     }
   }
 
   // Create points from grid candidates
-  for (vector<CandidateCorner>::iterator it=corners_grid_.begin(); it != corners_grid_.end(); it++) {
-    if ((*it).score > Config::MinFeatureScore())
-      fcorners->push_back(Eigen::Vector3i(it->x, it->y, it->level));
+  for (auto it=cgrid_.begin(); it != cgrid_.end(); it++) {
+    if ((*it).second > Config::MinFeatureScore())
+      indices->push_back((*it).first);
   }
 }
 

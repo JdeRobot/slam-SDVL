@@ -49,17 +49,24 @@ void HomographyInit::Reset() {
 
 bool HomographyInit::InitFirstFrame(const shared_ptr<Frame> &frame) {
   shared_ptr<Feature> feature;
+  Eigen::Vector3i corner;
+  int index, scale;
 
   frame1_ = frame;
 
   // Filter corners
   frame1_->FilterCorners();
-  vector<Eigen::Vector3i> &fcorners = frame1_->GetFilteredCorners();
+  vector<Eigen::Vector3i> &corners = frame1_->GetCorners();
+  vector<int> &fcorners = frame1_->GetFilteredCorners();
 
   pixels1_.clear();
   vectors1_.clear();
-  for (vector<Eigen::Vector3i>::iterator it=fcorners.begin(); it != fcorners.end(); it++) {
-    feature = std::make_shared<Feature>(frame1_, Eigen::Vector2d((*it)(0), (*it)(1)), (*it)(2));
+  for (auto it=fcorners.begin(); it != fcorners.end(); it++) {
+    index = *it;
+    corner = corners[index];
+    scale = (1 << corner(2));
+
+    feature = std::make_shared<Feature>(frame1_, Eigen::Vector2d(corner(0)*scale, corner(1)*scale), corner(2));
     pixels1_.push_back(cv::Point2f(feature->GetPosition()[0], feature->GetPosition()[1]));
     vectors1_.push_back(feature->GetVector());
   }
@@ -78,7 +85,7 @@ bool HomographyInit::InitSecondFrame(const shared_ptr<Frame> &frame) {
   vector<double> depths;
   double depth, scale;
   Eigen::Vector2d p1, p2;
-  int nfeatures, dist;
+  int nfeatures, dist, margin;
   shared_ptr<Feature> feature1, feature2;
   bool fixed = false;
 
@@ -94,6 +101,12 @@ bool HomographyInit::InitSecondFrame(const shared_ptr<Frame> &frame) {
 
   if (triangulations_.empty())
     return false;
+
+  // Set margin
+  if (Config::UseORB())
+    margin = 4+Config::ORBSize()/2;
+  else
+    margin = 1+Config::PatchSize()/2;
 
   // Rescale map
   for (unsigned int i=0; i < triangulations_.size(); ++i)
@@ -112,7 +125,7 @@ bool HomographyInit::InitSecondFrame(const shared_ptr<Frame> &frame) {
     p1 << pixels1_[*it].x, pixels1_[*it].y;
     p2 << pixels2_[*it].x, pixels2_[*it].y;
 
-    if (!camera->IsInsideImage(p1.cast<int>(), 10) || !camera->IsInsideImage(p2.cast<int>(), 10) || triangulations_[*it](2) < 0)
+    if (!camera->IsInsideImage(p1.cast<int>(), margin) || !camera->IsInsideImage(p2.cast<int>(), margin) || triangulations_[*it](2) < 0)
       continue;
 
     // Get depth
@@ -126,11 +139,14 @@ bool HomographyInit::InitSecondFrame(const shared_ptr<Frame> &frame) {
     feature2 = std::make_shared<Feature>(frame2_, candidate, p2, vectors2_[*it], 0);
 
     if (Config::UseORB()) {
-      // Check descriptors
-      if (!detector_.GetDescriptord(frame1_->GetPyramid()[0], p1, &feature1->GetDescriptor()))
-        continue;
-      if (!detector_.GetDescriptord(frame2_->GetPyramid()[0], p2, &feature2->GetDescriptor()))
-        continue;
+      vector<uchar> desc(32);
+
+      // Get descriptors
+      detector_.GetDescriptor(frame1_->GetPyramid()[0], p1.cast<int>(), &desc);
+      feature1->SetDescriptor(desc);
+
+      detector_.GetDescriptor(frame2_->GetPyramid()[0], p2.cast<int>(), &desc);
+      feature2->SetDescriptor(desc);
 
       dist = detector_.Distance(feature1->GetDescriptor(), feature2->GetDescriptor());
       if (dist > MIN_ORB_THRESHOLD)

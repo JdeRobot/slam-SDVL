@@ -43,35 +43,44 @@ Matcher::~Matcher() {
 }
 
 bool Matcher::SearchPoint(const shared_ptr<Frame> &frame, const shared_ptr<Feature> &feature,
-                             double idepth, double idepth_std, Eigen::Vector2d *px, int *flevel) {
+                             double idepth, double idepth_std, bool fixed, Eigen::Vector2d *px, int *flevel) {
   Eigen::Matrix2d affine_matrix;
   double range, zmin, zmax;
-  int half_size = patch_size_/2;
   int slevel, level = feature->GetLevel();
+  Eigen::Vector2d pxa, pxb;
 
   shared_ptr<Frame> ref_frame = feature->GetFrame();
   assert(ref_frame);
 
-  // Restrict epipolar search to a narrow depth range
-  zmin = 1.0/(idepth + 2.0*idepth_std);
-  zmax = 1.0/(std::max(idepth - 2.0*idepth_std, 0.00000001));
-
-  // Get 2d epipolar line extremes
   SE3 pose = frame->GetPose() * ref_frame->GetPose().Inverse();
-  Eigen::Vector3d p3d_min = ref_frame->GetWorldPose() * (zmin*feature->GetVector());
-  Eigen::Vector3d p3d_max = ref_frame->GetWorldPose() * (zmax*feature->GetVector());
 
-  Eigen::Vector2d pxa, pxb;
-  if (!frame->Project(p3d_min, &pxa))
-    return false;
-  if (!frame->Project(p3d_max, &pxb))
-    return false;
+  // Check projection
+  if (fixed) {
+    zmin = 1.0/(idepth + 2.0*idepth_std);
+    Eigen::Vector3d p3d_min = ref_frame->GetWorldPose() * (zmin*feature->GetVector());
+
+    if (!frame->Project(p3d_min, &pxa))
+      return false;
+  } else {
+    // Restrict epipolar search to a narrow depth range
+    zmin = 1.0/(idepth + 2.0*idepth_std);
+    zmax = 1.0/(std::max(idepth - 2.0*idepth_std, 0.00000001));
+
+    // Get 2d epipolar line extremes
+    Eigen::Vector3d p3d_min = ref_frame->GetWorldPose() * (zmin*feature->GetVector());
+    Eigen::Vector3d p3d_max = ref_frame->GetWorldPose() * (zmax*feature->GetVector());
+
+    if (!frame->Project(p3d_min, &pxa))
+      return false;
+    if (!frame->Project(p3d_max, &pxb))
+      return false;
+  }
 
   if (Config::UseORB())
     assert(feature->HasDescriptor());
 
   // Check margins in sublevel where feature was found to create patch
-  if (!ref_frame->GetCamera()->IsInsideImage(feature->GetLevelPosition().cast<int>(), half_size+2, level))
+  if (!ref_frame->GetCamera()->IsInsideImage(feature->GetLevelPosition().cast<int>(), patch_size_/2+2, level))
     return false;
 
   // Warp affine and create path
@@ -80,19 +89,25 @@ bool Matcher::SearchPoint(const shared_ptr<Frame> &frame, const shared_ptr<Featu
   slevel = GetSearchLevel(affine_matrix);
   CreatePatch(affine_matrix, img, feature->GetPosition(), level, slevel, border_patch_, patch_);
 
-  // Check if we have a line or a feature
-  Eigen::Vector2d eline = pxa - pxb;
-  range = Config::SearchSize()-1+1*(1 << slevel);
-  if (eline.dot(eline) <= 1.0) {
+  range = Config::SearchSize();
+  for (int i=1; i<= slevel; i++)
+    range *= 1.2;
+
+  vector<int> indices;
+
+  if (fixed) {
     // Search in feature
     Eigen::Vector2d cpos = *px;
-    if (!SearchFeature(frame, cpos, slevel, range, patch_, px, feature->GetDescriptor()))
-      return false;
+
+    // Get features in range
+    GetCornersInRange(frame, cpos, level, range, &indices);
   } else {
-    // Search in epipolar line
-    if (!SearchLine(frame, pxa, pxb, slevel, range, patch_, px, feature->GetDescriptor()))
-      return false;
+    // Get features close to epipolar line
+    GetCornersInRange(frame, pxa, pxb, level, range, &indices);
   }
+
+  if (!SearchFeatures(frame, indices, patch_, px, feature->GetDescriptor()))
+    return false;
 
   // Subpixel refinament
   Eigen::Vector2d px_scaled(*px/(1 << slevel));
@@ -105,27 +120,20 @@ bool Matcher::SearchPoint(const shared_ptr<Frame> &frame, const shared_ptr<Featu
   return false;
 }
 
-bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& pxa, const Eigen::Vector2d& pxb,
-                         int level, double range, uint8_t* patch, Eigen::Vector2d *px, const std::vector<uchar> &desc) {
-  int sumA = 0, sumAA = 0, sumB, sumBB, sumAB;
-  Eigen::Vector2d best_px, eline, vnormal;
+void Matcher::GetCornersInRange(const std::shared_ptr<Frame> &frame, const Eigen::Vector2d& pxa,
+                                const Eigen::Vector2d& pxb, int level, double range, vector<int> *indices) {
+  Eigen::Vector2d eline, vnormal;
   double dist, u, dx, dy;
-  double range2, normdist, xdiff, ydiff, vline;
-  int index, threshold, best_score, score;
-  int half_size = patch_size_/2;
-
-  // Get corners for this level and search
-  cv::Mat &cimg = frame->GetPyramid()[level];
-  vector<Eigen::Vector2i>& corners = frame->GetCorners()[level];
-  vector<vector<uchar>>& descriptors = frame->GetDescriptors()[level];
+  double normdist, xdiff, ydiff, vline;
+  double range2 = range*range;
+  int index, clevel, margin;
 
   if (Config::UseORB())
-    threshold = MIN_ORB_THRESHOLD;
+    margin = 4+Config::ORBSize()/2;
   else
-    threshold = patch_size_*patch_size_*MAX_SSD_PER_PIXEL;
+    margin = 1+patch_size_/2;
 
-  best_score = threshold + 1;
-  range2 = range*range;
+  vector<Eigen::Vector3i>& ccorners = frame->GetCorners();
 
   // Epipolar line
   eline = pxa - pxb;
@@ -138,32 +146,23 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
   ydiff = pxb(1)-pxa(1);
   vline = (xdiff)*(xdiff) + (ydiff)*(ydiff);
 
-  // Get corners close to epipolar line
-  int rowtop = std::max(0, static_cast<int>(std::min(pxa(1)-range, pxb(1)-range)));
-  int rowbottom = std::max(pxa(1)+range, pxb(1)+range)+1;
-
-  int scaled_top = rowtop/(1 << level);
-  int scaled_bottom = rowbottom/(1 << level);
-  if (scaled_top >= cimg.rows || scaled_bottom < 0)
-    return false;
-
-  if (!Config::UseORB()) {
-    // Compute ZMSSD with corners close to selected feature
-    GetZMSSDScore(patch, &sumA, &sumAA);
-  }
-
   // Check each corner
-  for (auto it = corners.begin(); it != corners.end(); it++) {
-    Eigen::Vector2d pos((*it)(0)*(1 << level), (*it)(1)*(1 << level));
+  index = 0;
+  for (auto it = ccorners.begin(); it != ccorners.end(); it++, index++) {
+    clevel = (*it)(2);
 
-    if (!Config::UseORB()) {
-      // Check borders
-      if ((*it)(0)-half_size < 0 || (*it)(1)-half_size < 0)
-        continue;
+    // Same level or previous/next
+    if (abs(clevel - level) > 1)
+      continue;
 
-      if ((*it)(1)+half_size >= cimg.rows || (*it)(0)+half_size >= cimg.cols)
-        continue;
-    }
+    // Check borders
+    if ((*it)(0)-margin < 0 || (*it)(1)-margin < 0)
+      continue;
+
+    if ((*it)(1)+margin >= frame->GetPyramid()[clevel].rows || (*it)(0)+margin >= frame->GetPyramid()[clevel].cols)
+      continue;
+
+    Eigen::Vector2d pos((*it)(0)*(1 << clevel), (*it)(1)*(1 << clevel));
 
     // Check distance from feature to epipolar line
     dist = normdist - pos.dot(vnormal);
@@ -188,55 +187,58 @@ bool Matcher::SearchLine(const shared_ptr<Frame> &frame, const Eigen::Vector2d& 
         continue;
     }
 
-    if (Config::UseORB()) {
-      index = it-corners.begin();
-      if (descriptors[index].empty()) {
-        // Get descriptor for the first time
-        descriptors[index].resize(32);
-        if (!detector_.GetDescriptor(cimg, *it, &descriptors[index])) {
-          // Resize again and set zero (not valid)
-          descriptors[index].resize(1, 0);
-          continue;
-        }
-      } else {
-        // Check if valid
-        if (descriptors[index].size() != 32)
-          continue;
-      }
-
-      // Compare descriptors
-      score = detector_.Distance(desc, descriptors[index]);
-    } else {
-      // Compare patch
-      uint8_t* cur_patch = cimg.data + ((*it)(1)-half_size)*cimg.cols + ((*it)(0)-half_size);
-      score = CompareZMSSDScore(patch, cur_patch, sumA, sumAA, cimg.cols, &sumB, &sumBB, &sumAB);
-    }
-
-    if (score < best_score) {
-      best_score = score;
-      best_px = pos;
-    }
+    indices->push_back(index);
   }
-
-  if (best_score >= threshold)
-      return false;
-
-  *px = best_px;
-  return true;
 }
 
-bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2d& cpos,
-                         int level, double range, uint8_t* patch, Eigen::Vector2d *px, const std::vector<uchar> &desc) {
+void Matcher::GetCornersInRange(const std::shared_ptr<Frame> &frame, const Eigen::Vector2d& cpos, 
+                                int level, double range, vector<int> *indices) {
+  double range2 = range*range;
+  int index, clevel, margin;
+
+  if (Config::UseORB())
+    margin = 4+Config::ORBSize()/2;
+  else
+    margin = 1+patch_size_/2;
+
+  vector<Eigen::Vector3i>& ccorners = frame->GetCorners();
+
+  // Check each corner
+  index = 0;
+  for (auto it = ccorners.begin(); it != ccorners.end(); it++, index++) {
+    clevel = (*it)(2);
+
+    // Same level or previous/next
+    if (abs(clevel - level) > 1)
+      continue;
+
+    // Check borders
+    if ((*it)(0)-margin < 0 || (*it)(1)-margin < 0)
+      continue;
+
+    if ((*it)(1)+margin >= frame->GetPyramid()[clevel].rows || (*it)(0)+margin >= frame->GetPyramid()[clevel].cols)
+      continue;
+
+    Eigen::Vector2d pos((*it)(0)*(1 << clevel), (*it)(1)*(1 << clevel));
+
+    // Reject features outside circle
+    if ((cpos - pos).squaredNorm() > range2)
+      continue;
+
+    indices->push_back(index);
+  }
+}
+
+bool Matcher::SearchFeatures(const shared_ptr<Frame> &frame, const vector<int> &indices, uint8_t* patch,
+                             Eigen::Vector2d *px, const vector<uchar> &desc) {
   int sumA = 0, sumAA = 0, sumB, sumBB, sumAB;
   Eigen::Vector2d best_px;
-  double range2;
-  int index, threshold, best_score, score;
-  int half_size = patch_size_/2;
+  int index, threshold, best_score, score, level;
+  Eigen::Vector3i corner;
+  Eigen::Vector2i p2d;
 
-  // Get corners for this level and search
-  cv::Mat &cimg = frame->GetPyramid()[level];
-  vector<Eigen::Vector2i>& corners = frame->GetCorners()[level];
-  vector<vector<uchar>>& descriptors = frame->GetDescriptors()[level];
+  vector<vector<uchar>>& descriptors = frame->GetDescriptors();
+  vector<Eigen::Vector3i>& corners = frame->GetCorners();
 
   if (Config::UseORB())
     threshold = MIN_ORB_THRESHOLD;
@@ -244,17 +246,6 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
     threshold = patch_size_*patch_size_*MAX_SSD_PER_PIXEL;
 
   best_score = threshold + 1;
-  range2 = range*range;
-
-  // Get corners close to feature
-  vector<Eigen::Vector2i>::iterator it, it_end;
-  int rowtop = std::max(0, static_cast<int>(cpos(1)-range));
-  int rowbottom = cpos(1)+range+1;
-
-  int scaled_top = rowtop/(1 << level);
-  int scaled_bottom = rowbottom/(1 << level);
-  if (scaled_top >= cimg.rows || scaled_bottom < 0)
-    return false;
 
   if (!Config::UseORB()) {
     // Compute ZMSSD with corners close to selected feature
@@ -262,49 +253,33 @@ bool Matcher::SearchFeature(const shared_ptr<Frame> &frame, const Eigen::Vector2
   }
 
   // Check each corner
-  for (auto it = corners.begin(); it != corners.end(); it++) {
-    Eigen::Vector2d pos((*it)(0)*(1 << level), (*it)(1)*(1 << level));
+  for (auto it = indices.begin(); it != indices.end(); it++) {
+    index = *it;
+    corner = corners[index];
+    p2d << corner(0), corner(1);
+    level = corner(2);
 
-    if (!Config::UseORB()) {
-      // Check borders
-      if ((*it)(0)-half_size < 0 || (*it)(1)-half_size < 0)
-        continue;
-
-      if ((*it)(1)+half_size >= cimg.rows || (*it)(0)+half_size >= cimg.cols)
-        continue;
-    }
-
-    // Reject features outside circle
-    if ((cpos - pos).squaredNorm() > range2)
-      continue;
+    cv::Mat &cimg = frame->GetPyramid()[level];
 
     if (Config::UseORB()) {
-      index = it-corners.begin();
+      // Check if it already exists
       if (descriptors[index].empty()) {
-        // Get descriptor for the first time
         descriptors[index].resize(32);
-        if (!detector_.GetDescriptor(cimg, *it, &descriptors[index])) {
-          // Resize again and set zero (not valid)
-          descriptors[index].resize(1, 0);
-          continue;
-        }
-      } else {
-        // Check if valid
-        if (descriptors[index].size() != 32)
-          continue;
+        detector_.GetDescriptor(cimg, p2d, &descriptors[index]);
       }
 
       // Compare descriptors
       score = detector_.Distance(desc, descriptors[index]);
     } else {
       // Compare patch
-      uint8_t* cur_patch = cimg.data + ((*it)(1)-half_size)*cimg.cols + ((*it)(0)-half_size);
+
+      uint8_t* cur_patch = cimg.data + (corner(1)-patch_size_/2)*cimg.cols + (corner(0)-patch_size_/2);
       score = CompareZMSSDScore(patch, cur_patch, sumA, sumAA, cimg.cols, &sumB, &sumBB, &sumAB);
     }
 
     if (score < best_score) {
       best_score = score;
-      best_px = pos;
+      best_px << p2d(0)*(1 << level), p2d(1)*(1 << level);
     }
   }
 

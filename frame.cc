@@ -58,9 +58,9 @@ Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img, bool co
 Frame::~Frame() {
   RemoveFeatures();
 
-  for (auto it=filtered_descriptors_.begin(); it != filtered_descriptors_.end(); it++)
+  for (auto it=descriptors_.begin(); it != descriptors_.end(); it++)
     it->clear();
-  filtered_descriptors_.clear();
+  descriptors_.clear();
 }
 
 void Frame::SetKeyframe() {
@@ -121,21 +121,18 @@ void Frame::CreatePyramid(const cv::Mat& img) {
 
 void Frame::CreateCorners(int levels, int nfeatures) {
   FastDetector detector(width_, height_, false);
-  corners_.resize(Config::MaxFastLevels());
 
   // Get corners for each level
   detector.DetectPyramid(pyramid_, &corners_, nfeatures);
 
-  if (Config::UseORB()) {
-    // Reserve memory for ORB descriptors
-    descriptors_.resize(Config::MaxFastLevels());
-    for (int i=0; i < Config::MaxFastLevels(); i++) {
-      descriptors_[i].resize(corners_[i].size());
-    }
-  }
+  // Reserve memory for ORB descriptors
+  if (Config::UseORB())
+    descriptors_.resize(corners_.size());
 }
 
 void Frame::FilterCorners() {
+  int index, level;
+
   assert(filtered_corners_.empty());
 
   FastDetector detector(width_, height_);
@@ -149,16 +146,18 @@ void Frame::FilterCorners() {
   detector.FilterCorners(pyramid_, corners_, &filtered_corners_);
 
   if (Config::UseORB()) {
+    vector<uchar> desc(32);
+
     // Calc ORB descriptors
-    for (auto it=filtered_corners_.begin(); it != filtered_corners_.end();) {
-      vector<uchar> desc(32);
-      int level = (*it)(2);
-      if (!orb_detector_->GetDescriptor(pyramid_[level], Eigen::Vector2i((*it)(0), (*it)(1)), &desc, level)) {
-        it = filtered_corners_.erase(it);
-        continue;
+    for (auto it=filtered_corners_.begin(); it != filtered_corners_.end(); it++) {
+      index = *it;
+      Eigen::Vector3i corner = corners_[index];
+      level = corner(2);
+
+      if (descriptors_[index].empty()) {
+        descriptors_[index].resize(32);
+        orb_detector_->GetDescriptor(pyramid_[level], Eigen::Vector2i(corner(0), corner(1)), &descriptors_[index]);
       }
-      filtered_descriptors_.push_back(desc);
-      it++;
     }
   }
 }
