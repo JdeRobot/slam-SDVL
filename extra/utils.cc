@@ -219,6 +219,12 @@ double GetMedianVector(vector<double>* v) {
   return *it;
 }
 
+double Distance2D(const Eigen::Vector2d &v1, const Eigen::Vector2d &v2) {
+  double d1 = v1(0)-v2(0);
+  double d2 = v1(1)-v2(1);
+  return sqrt(d1*d1+d2*d2);
+}
+
 }  // namespace sdvl
 
 

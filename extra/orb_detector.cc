@@ -347,20 +347,14 @@ void ORBDetector::InitParameters() {
   }
 }
 
-bool ORBDetector::GetDescriptord(const cv::Mat &src, const Eigen::Vector2d &p, std::vector<uchar> *desc, int level) {
-  return GetDescriptor(src, p.cast<int>(), desc, level);
-}
-
-bool ORBDetector::GetDescriptor(const cv::Mat &src, const Eigen::Vector2i &p, std::vector<uchar> *desc, int level) {
+bool ORBDetector::GetDescriptor(const cv::Mat &src, const Eigen::Vector2i &pos, std::vector<uchar> *desc) {
   float factorPI = static_cast<float>(CV_PI/180.f);
   const int step = static_cast<int>(src.step);
   const cv::Point* pattern = &pattern_[0];
-  Eigen::Vector2i pos(p(0)/(1 << level), p(1)/(1 << level));
   const uchar* center = &src.at<uchar>(pos(1), pos(0));
 
   // Check limits
-  if (!IsInsideLimits(src, pos))
-    return false;
+  assert(IsInsideLimits(src, pos));
 
   // Get orientation
   float angle = GetOrientation(src, pos)*factorPI;

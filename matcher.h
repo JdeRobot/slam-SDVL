@@ -43,7 +43,7 @@ class Matcher {
 
   // Search a point in current frame close to a epipolar line
   bool SearchPoint(const std::shared_ptr<Frame> &frame, const std::shared_ptr<Feature> &feature,
-                      double idepth, double idepth_std, Eigen::Vector2d *px, int *flevel);
+                      double idepth, double idepth_std, bool fixed, Eigen::Vector2d *px, int *flevel);
 
  private:
   // Compute affine warp matrix
@@ -66,13 +66,14 @@ class Matcher {
   // Compare patch to previous calculated ZMSSD
   double CompareZMSSDScore(uint8_t *ref_patch, uint8_t *patch, int sumA, int sumAA, int cols, int *sumB, int *sumBB, int *sumAB);
 
-  // Search corners close to line
-  bool SearchLine(const std::shared_ptr<Frame> &frame, const Eigen::Vector2d& pxa, const Eigen::Vector2d& pxb,
-                  int level, double range, uint8_t* patch, Eigen::Vector2d *px, const std::vector<uchar> &desc);
+  // Get features close to epipolar line
+  void GetCornersInRange(const std::shared_ptr<Frame> &frame, const Eigen::Vector2d& pxa, const Eigen::Vector2d& pxb, int level, double range, std::vector<int> *indices);
 
-  // Search corners close to feature
-  bool SearchFeature(const std::shared_ptr<Frame> &frame, const Eigen::Vector2d& cpos, int level, double range,
-                   uint8_t* patch, Eigen::Vector2d *px, const std::vector<uchar> &desc);
+  // Get corners close to a pixel
+  void GetCornersInRange(const std::shared_ptr<Frame> &frame, const Eigen::Vector2d& cpos, int level, double range, std::vector<int> *indices);
+
+  // Search best feature
+  bool SearchFeatures(const std::shared_ptr<Frame> &frame, const std::vector<int> &indices, uint8_t* patch, Eigen::Vector2d *px, const std::vector<uchar> &desc);
 
   uint8_t *patch_;
   uint8_t *border_patch_;

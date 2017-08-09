@@ -31,8 +31,9 @@ namespace sdvl {
 
 int Frame::counter_ = 0;
 
-Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img) {
+Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img, bool corners) {
   id_ = counter_;
+  kf_id_ = 0;
   camera_ = camera;
   orb_detector_ = detector;
   pyramid_levels_ = Config::PyramidLevels();
@@ -42,12 +43,14 @@ Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img) {
   is_keyframe_ = false;
   selected_ = false;
   last_ba_ = -1;
+  delete_ = false;
 
   // Create Image Pyramid
   CreatePyramid(img);
 
   // Create corners
-  CreateCorners(Config::MaxFastLevels());
+  if (corners)
+    CreateCorners(Config::MaxFastLevels(), Config::NumFeatures());
 
   counter_ += 1;
 }
@@ -55,9 +58,9 @@ Frame::Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img) {
 Frame::~Frame() {
   RemoveFeatures();
 
-  for (auto it=filtered_descriptors_.begin(); it != filtered_descriptors_.end(); it++)
+  for (auto it=descriptors_.begin(); it != descriptors_.end(); it++)
     it->clear();
-  filtered_descriptors_.clear();
+  descriptors_.clear();
 }
 
 void Frame::SetKeyframe() {
@@ -116,41 +119,23 @@ void Frame::CreatePyramid(const cv::Mat& img) {
     cv::pyrDown(pyramid_[i-1], pyramid_[i], cv::Size(pyramid_[i-1].cols/2, pyramid_[i-1].rows/2));
 }
 
-void Frame::CreateCorners(int levels) {
-  int size, index, rows;
-
-  FastDetector detector;
-  corners_.resize(Config::MaxFastLevels());
-  corners_rows_.resize(Config::MaxFastLevels());
+void Frame::CreateCorners(int levels, int nfeatures) {
+  FastDetector detector(width_, height_, false);
 
   // Get corners for each level
-  detector.DetectPyramid(pyramid_, &corners_);
+  detector.DetectPyramid(pyramid_, &corners_, nfeatures);
 
-  // Get pointers to each row. It speeds up finding corners
-  for (int i=0; i < Config::MaxFastLevels(); i++) {
-    index = 0;
-    size = corners_[i].size();
-    rows = pyramid_[i].rows;
-    for (int r=0; r < rows; r++) {
-      while (index < size && r > corners_[i][index](1))
-        index++;
-      corners_rows_[i].push_back(index);
-    }
-  }
-
-  if (Config::UseORB()) {
-    // Reserve memory for ORB descriptors
-    descriptors_.resize(Config::MaxFastLevels());
-    for (int i=0; i < Config::MaxFastLevels(); i++) {
-      descriptors_[i].resize(corners_[i].size());
-    }
-  }
+  // Reserve memory for ORB descriptors
+  if (Config::UseORB())
+    descriptors_.resize(corners_.size());
 }
 
-void Frame::FilterCorners(int cell_size) {
+void Frame::FilterCorners() {
+  int index, level;
+
   assert(filtered_corners_.empty());
 
-  FastDetector detector(width_, height_, cell_size);
+  FastDetector detector(width_, height_);
 
   // Lock cells where we already have features
   for (auto it=features_.begin(); it != features_.end(); it++) {
@@ -161,16 +146,18 @@ void Frame::FilterCorners(int cell_size) {
   detector.FilterCorners(pyramid_, corners_, &filtered_corners_);
 
   if (Config::UseORB()) {
+    vector<uchar> desc(32);
+
     // Calc ORB descriptors
-    for (auto it=filtered_corners_.begin(); it != filtered_corners_.end();) {
-      vector<uchar> desc(32);
-      int level = (*it)(2);
-      if (!orb_detector_->GetDescriptor(pyramid_[level], Eigen::Vector2i((*it)(0), (*it)(1)), &desc)) {
-        it = filtered_corners_.erase(it);
-        continue;
+    for (auto it=filtered_corners_.begin(); it != filtered_corners_.end(); it++) {
+      index = *it;
+      Eigen::Vector3i corner = corners_[index];
+      level = corner(2);
+
+      if (descriptors_[index].empty()) {
+        descriptors_[index].resize(32);
+        orb_detector_->GetDescriptor(pyramid_[level], Eigen::Vector2i(corner(0), corner(1)), &descriptors_[index]);
       }
-      filtered_descriptors_.push_back(desc);
-      it++;
     }
   }
 }
@@ -208,14 +195,18 @@ void Frame::GetBestConnections(vector<shared_ptr<Frame>>* connections, int n) {
 
   if (n == 0 || n >= static_cast<int>(connections_.size())) {
     // Copy all
-    for (auto it=connections_.begin(); it != connections_.end(); it++)
-      connections->push_back(it->first);
+    for (auto it=connections_.begin(); it != connections_.end(); it++) {
+      if (!it->first->ToDelete())
+        connections->push_back(it->first);
+    }
   } else {
     // Sort by num points shared
     sort(connections_.begin(), connections_.end(), SharedPointsComparator());
     for (auto it=connections_.begin(); it != connections_.end() && count < n; it++) {
-      connections->push_back(it->first);
-      count++;
+      if (!it->first->ToDelete()) {
+        connections->push_back(it->first);
+        count++;
+      }
     }
   }
 }

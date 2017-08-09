@@ -101,6 +101,7 @@ class Config {
   static int MaxFastLevels() { return GetInstance().kMaxFastLevels_; }
   static int FastThreshold() { return GetInstance().kFastThreshold_; }
   static int MinFeatureScore() { return GetInstance().kMinFeatureScore_; }
+  static int NumFeatures() { return GetInstance().kNumFeatures_; }
 
  private:
   Config();
@@ -155,6 +156,7 @@ class Config {
   int kMaxFastLevels_;    // Max number of pyramid levels in FAST
   int kFastThreshold_;    // FAST threahold
   int kMinFeatureScore_;  // Min feature Shi Tomasi score
+  int kNumFeatures_;      // Number of features detected per frame
 };
 
 }  // namespace sdvl

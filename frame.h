@@ -42,14 +42,14 @@ class Frame {
  public:
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
-  Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img);
+  Frame(Camera* camera, ORBDetector * detector, const cv::Mat& img, bool corners);
   ~Frame();
 
   bool IsKeyframe() { return is_keyframe_; }
   void SetKeyframe();
 
   // Filter corners (required with Keyframes)
-  void FilterCorners(int cell_size);
+  void FilterCorners();
 
   inline SE3& GetPose() { return pose_; }
   inline const SE3& GetPose() const { return pose_; }
@@ -57,25 +57,28 @@ class Frame {
 
   inline std::vector<cv::Mat>& GetPyramid() { return pyramid_; }
   inline std::vector<std::shared_ptr<Feature>>& GetFeatures() { return features_; }
-  inline std::vector<std::vector<Eigen::Vector2i>>& GetCorners() { return corners_; }
-  inline std::vector<std::vector<int>>& GetCornersRows() { return corners_rows_; }
-  inline std::vector<Eigen::Vector3i>& GetFilteredCorners() { return filtered_corners_; }
+  inline std::vector<Eigen::Vector3i>& GetCorners() { return corners_; }
+  inline std::vector<int>& GetFilteredCorners() { return filtered_corners_; }
   inline std::vector<Eigen::Vector2d>& GetOutliers() { return outliers_; }
 
-  inline std::vector<std::vector<std::vector<uchar>>>& GetDescriptors() { return descriptors_; }
-  inline std::vector<std::vector<uchar>>& GetFilteredDescriptors() { return filtered_descriptors_; }
-  inline std::vector<std::pair<std::shared_ptr<Frame>, int>>& GetConnections() { return connections_; }
+  inline std::vector<std::vector<uchar>>& GetDescriptors() { return descriptors_; }
 
   inline Camera * GetCamera() const { return camera_; }
   inline int GetWidth() const { return width_; }
   inline int GetHeight() const { return height_; }
   inline int GetID() const { return id_; }
 
+  inline void SetKeyframeID(int id) { kf_id_ = id; }
+  inline int GetKeyframeID() const { return kf_id_; }
+
   inline bool IsSelected() { return selected_; }
   inline void SetSelected(bool v) { selected_ = v; }
 
   inline int GetLastBA() const { return last_ba_; }
   inline void SetLastBA(int id) { last_ba_ = id; }
+
+  inline bool ToDelete() const { return delete_; }
+  inline void SetDelete() { delete_ = true; }
 
   // Return pose in world coordinate
   inline SE3 GetWorldPose() const { return pose_.Inverse(); }
@@ -133,7 +136,7 @@ class Frame {
   }
 
   // Create corners
-  void CreateCorners(int levels);
+  void CreateCorners(int levels, int nfeatures);
 
   // Remove features
   void RemoveFeatures();
@@ -143,6 +146,7 @@ class Frame {
   void CreatePyramid(const cv::Mat& img);
 
   int id_;                      // Frame unique id
+  int kf_id_;                   // Keyframe unique id
   Camera * camera_;             // Camera model
   ORBDetector * orb_detector_;  // ORB detector
   int pyramid_levels_;          // Pyramid levels calculated
@@ -152,15 +156,14 @@ class Frame {
   int width_;                       // Image width in first pyramid level
   int height_;                      // Image width in first pyramid level
   SE3 pose_;                        // Frame to world pose
+  bool delete_;                     // True if it will be deleted
 
-  std::vector<std::shared_ptr<Feature>> features_;      // Features detected in this frame
-  std::vector<std::vector<Eigen::Vector2i>> corners_;   // Corners detected in each pyramid level
-  std::vector<std::vector<int>> corners_rows_;          // Pointers to corners in each row
-  std::vector<Eigen::Vector3i> filtered_corners_;       // Corners filtered. Third parameter to store level
-  std::vector<Eigen::Vector2d> outliers_;               // Outliers, only for DEBUG
+  std::vector<std::shared_ptr<Feature>> features_;    // Features detected in this frame
+  std::vector<Eigen::Vector3i> corners_;              // Corners detected. Third parameter to store level
+  std::vector<int> filtered_corners_;                 // Indices of corners filtered
+  std::vector<Eigen::Vector2d> outliers_;             // Outliers, only for DEBUG
 
-  std::vector<std::vector<std::vector<uchar>>> descriptors_;  // ORB descriptor for each corner
-  std::vector<std::vector<uchar>> filtered_descriptors_;      // ORB descriptors for fileted corners
+  std::vector<std::vector<uchar>> descriptors_;           // ORB descriptor for detected corners
 
   std::vector<std::pair<std::shared_ptr<Frame>, int>> connections_;     // Connected keyframes
 

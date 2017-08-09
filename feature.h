@@ -67,31 +67,35 @@ class Feature {
     return v_;
   }
 
-  inline int GetLevel() const {
-    return level_;
+  inline const void SetVector(Eigen::Vector3d &v) {
+    v_ = v;
   }
 
-  inline std::vector<uchar> & GetDescriptor() {
-    has_descriptor_ = true;
-    return descriptor_;
+  inline int GetLevel() const {
+    return level_;
   }
 
   inline const std::vector<uchar> & GetDescriptor() const {
     return descriptor_;
   }
 
+  inline void SetDescriptor(const std::vector<uchar> &d) {
+    copy(d.begin(), d.end(), descriptor_.begin());
+    has_descriptor_ = true;
+  }
+
   inline bool HasDescriptor() const {
     return has_descriptor_;
   }
 
-  // Get position in level where was detected
+  // Get position in level where it was detected
   inline Eigen::Vector2d GetLevelPosition() {
     return p2d_/(1 << level_);
   }
 
  private:
   std::shared_ptr<Frame> frame_;      // Frame where feature was detected
-  std::shared_ptr<Point> point_;  // Point related to this feature
+  std::shared_ptr<Point> point_;      // Point related to this feature
   Eigen::Vector2d p2d_;               // 2D image position
   Eigen::Vector3d v_;                 // 3D vector
   int level_;                         // Pyramid level where it was detected

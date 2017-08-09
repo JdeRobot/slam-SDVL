@@ -62,6 +62,9 @@ double GetParallax(const Eigen::Vector3d &src1, const Eigen::Vector3d &src2, con
 // Get median element of a vector
 double GetMedianVector(std::vector<double>* v);
 
+// Distance between two 2D vectors
+double Distance2D(const Eigen::Vector2d &v1, const Eigen::Vector2d &v2);
+
 }  // namespace sdvl
 
 #endif  // SDVL_EXTRA_UTILS_H_

@@ -78,10 +78,6 @@ void Bundle::Local(const vector<shared_ptr<Frame>> &kfs) {
       if (!point || point->ToDelete())
         continue;
 
-      // Only use fixed points
-      if (!point->IsFixed())
-        continue;
-
       // Skip if it has been already saved
       if (point->GetLastBA() != id_) {
         point->SetLastBA(id_);
@@ -95,14 +91,14 @@ void Bundle::Local(const vector<shared_ptr<Frame>> &kfs) {
   if (lpoints.empty())
     return;
 
-  // Get keyframes the see these points and save as fixed
+  // Get keyframes that see these points and save as fixed
   for (auto it=lpoints.begin(); it != lpoints.end(); it++) {
     list<shared_ptr<Feature>>& cfeatures = (*it)->GetFeatures();
 
     for (auto it_fts=cfeatures.begin(); it_fts != cfeatures.end(); it_fts++) {
       shared_ptr<Frame> frame = (*it_fts)->GetFrame();
 
-      if (frame->GetLastBA() != id_) {
+      if (!frame->ToDelete() && frame->GetLastBA() != id_) {
         frame->SetLastBA(id_);
         fixed_kfs.push_back(frame);
       }
@@ -164,6 +160,12 @@ void Bundle::Local(const vector<shared_ptr<Frame>> &kfs) {
     // Set edges
     for (auto it_fts=cfeatures.begin(); it_fts != cfeatures.end(); it_fts++) {
       shared_ptr<Frame> frame = (*it_fts)->GetFrame();
+
+      if (frame->ToDelete())
+        continue;
+
+      if(optimizer.vertex(id) == nullptr || optimizer.vertex(frame->GetID()) == nullptr)
+        continue;
 
       g2o::EdgeSE3ProjectXYZ* e = new g2o::EdgeSE3ProjectXYZ();
       e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));

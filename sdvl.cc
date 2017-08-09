@@ -35,9 +35,9 @@ namespace sdvl {
 
 SDVL::SDVL(Camera* camera) :
   camera_(camera),
-  map_(Config::CellSize()),
-  feature_align_(&map_, camera_, Config::CellSize(), Config::MaxMatches()),
-  h_init_(&map_, Config::CellSize(), Config::MinAvgShift()) {
+  map_(),
+  feature_align_(&map_, camera_, Config::MaxMatches()),
+  h_init_(&map_, Config::MinAvgShift()) {
   state_ = STATE_FIRST_FRAME;
   tracking_quality_ = TRACKING_GOOD;
   last_frame_ = nullptr;
@@ -56,7 +56,7 @@ bool SDVL::HandleFrame(const cv::Mat& img) {
   bool relocalize;
 
   // Create frame with current image
-  current_frame_ = std::make_shared<Frame>(camera_, &orb_detector_, img.clone());
+  current_frame_ = std::make_shared<Frame>(camera_, &orb_detector_, img.clone(), state_ == STATE_RUNNING);
 
   if (state_ == STATE_FIRST_FRAME) {
     SaveFirstFrame();
@@ -132,6 +132,7 @@ bool SDVL::HandleFrame(const cv::Mat& img) {
 bool SDVL::SaveFirstFrame() {
   cout << "[DEBUG] Process first frame" << endl;
 
+  current_frame_->CreateCorners(Config::MaxFastLevels(), 2*Config::NumFeatures());
   current_frame_->SetPose(sdvl::SE3());
   if (!h_init_.InitFirstFrame(current_frame_)) {
     cerr << "[ERROR] First frame couldn't be initialized" << endl;
@@ -149,6 +150,7 @@ bool SDVL::SaveFirstFrame() {
 bool SDVL::SaveSecondFrame() {
   cout << "[DEBUG] Process second frame" << endl;
 
+  current_frame_->CreateCorners(Config::MaxFastLevels(), Config::NumFeatures());
   if (!h_init_.InitSecondFrame(current_frame_)) {
     if (h_init_.HasError()) {
       cerr << "[ERROR] Homography couldn't be performed" << endl;

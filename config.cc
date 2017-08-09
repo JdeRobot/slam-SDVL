@@ -53,7 +53,7 @@ Config::Config() {
   video_params_.filename = "";
 
   kPyramidLevels_ = 5;
-  kCellSize_ = 25;
+  kCellSize_ = 32;
   kMinAvgShift_ = 50;
   kMaxMatches_ = 150;
   kMinMatches_ = 20;
@@ -82,6 +82,7 @@ Config::Config() {
   kMaxFastLevels_ = 3;
   kFastThreshold_ = 10;
   kMinFeatureScore_ = 50;
+  kNumFeatures_ = 1000;
 }
 
 bool Config::ReadParameters(std::string filename) {
@@ -155,6 +156,7 @@ bool Config::ReadParameters(std::string filename) {
   if (fs["SDVL.max_fast_levels"].isNamed()) fs["SDVL.max_fast_levels"] >> kMaxFastLevels_;
   if (fs["SDVL.fast_threshold"].isNamed()) fs["SDVL.fast_threshold"] >> kFastThreshold_;
   if (fs["SDVL.min_feature_score"].isNamed()) fs["SDVL.min_feature_score"] >> kMinFeatureScore_;
+  if (fs["SDVL.num_features"].isNamed()) fs["SDVL.num_features"] >> kNumFeatures_;
 
   fs.release();
 

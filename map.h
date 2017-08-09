@@ -41,7 +41,7 @@ class Feature;
 
 class Map {
  public:
-  explicit Map(int cell_size);
+  explicit Map();
   ~Map();
 
   // Start/Stop Map thread
@@ -100,26 +100,34 @@ class Map {
   // Check connections between a new keyframe and old keyframes
   void CheckConnections(const std::shared_ptr<Frame> &frame);
 
+  // Add more points from connected keyframes
+  void AddConnectionsPoints(const std::shared_ptr<Frame> &frame);
+
+  // Check redundant keyframes and remove them
+  void CheckRedundantKeyframes();
+
   // Return keyframe furthest apart from input frame
   std::shared_ptr<Frame> GetFurthestKeyframe(const std::shared_ptr<Frame> &frame);
 
   ORBDetector orb_detector_;  // ORB detector
 
   std::vector<std::shared_ptr<Frame>> keyframes_;     // List of keyframes
-  std::queue<std::shared_ptr<Frame>> frame_queue_;    // Queue of frames to search candidates
+  std::queue<std::shared_ptr<Frame>> frame_queue_;    // Queue of frames
+  std::queue<std::shared_ptr<Frame>> keyframe_queue_; // Queue of keyframes
   std::vector<std::shared_ptr<Frame>> frame_trash_;   // Frames trash
 
   std::vector<std::shared_ptr<Point>> candidates_;       // Points not converged
   std::vector<std::shared_ptr<Point>> points_trash_;     // Points trash
 
-  bool new_keyframe_set_;           // True if we have got a new keyframe
   bool candidates_updating_halt_;   // Stops candidates updating
   int n_initializations_;           // Number of keyframes where candidates where created
-  int cell_size_;                   // Grid cell size
   bool relocalizing_;               // True if tracking is relocalizing
   std::shared_ptr<Frame> ba_kf_;    // Keyframe to do bundle adjuntment
   std::shared_ptr<Frame> last_kf_;  // Last Keyframe saved
   int last_matches_;                // Matches found in last iteration
+  int initial_kf_id_;               // Id for initial keyframe
+  int last_kf_checked_;             // Last redundancy checked
+  int num_kfs_;                     // Keyframes counter
 
   std::thread* thread_;
   bool running_;
